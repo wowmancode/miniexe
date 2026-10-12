@@ -50,7 +50,8 @@ jobs:
         working-directory: app
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          echo 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m' >> gradle.properties
+          ./gradlew :app:assembleDebug --no-daemon --max-workers=2 --stacktrace
 
       - name: Verify APK contents
         run: |
