@@ -1,0 +1,58 @@
+name: Build MiniEXE APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out Winlator fork
+        uses: actions/checkout@v4
+
+      - name: Check out pinned Android app source
+        run: git submodule update --init --depth 1 app
+
+      - name: Apply MiniEXE app changes
+        run: |
+          git -C app apply --check ../patches/miniexe-app.patch
+          git -C app apply ../patches/miniexe-app.patch
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build dependencies
+        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0' 'ndk;24.0.8215888' 'cmake;3.22.1'
+
+      - name: Build ARM64 debug APK
+        working-directory: app
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK contents
+        run: |
+          set -euo pipefail
+          apk=app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.miniexe.android'"
+          unzip -Z1 "$apk" | grep -F 'lib/arm64-v8a/libwinlator.so'
+          sha256sum "$apk"
+          du -h "$apk"
+
+      - name: Upload MiniEXE APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniEXE-arm64-debug
+          path: app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 1

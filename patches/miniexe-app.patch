@@ -1,0 +1,625 @@
+diff --git a/app/build.gradle b/app/build.gradle
+index 7690275..9948ee4 100644
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -5,7 +5,7 @@ android {
+     compileSdk 35
+ 
+     defaultConfig {
+-        applicationId 'com.winlator'
++        applicationId 'com.miniexe.android'
+         minSdkVersion 26
+         targetSdkVersion 28
+         versionCode 33
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 1262c0d..4bfbb75 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -17,7 +17,7 @@
+     <uses-permission android:name="android.permission.WAKE_LOCK" />
+ 
+     <application
+-        android:icon="@mipmap/ic_launcher"
++        android:icon="@drawable/ic_miniexe_launcher"
+         android:appCategory="game"
+         android:isGame="true"
+         android:extractNativeLibs="true"
+@@ -64,7 +64,7 @@
+ 
+         <provider
+             android:name="androidx.core.content.FileProvider"
+-            android:authorities="com.winlator.FileProvider"
++            android:authorities="${applicationId}.FileProvider"
+             android:exported="false"
+             android:grantUriPermissions="true">
+ 
+diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+index 53fb456..04ce8ed 100644
+--- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
++++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+@@ -14,9 +14,12 @@ import android.view.Menu;
+ import android.view.MenuItem;
+ import android.view.MotionEvent;
+ import android.view.View;
++import android.view.Gravity;
+ import android.widget.ArrayAdapter;
++import android.widget.Button;
+ import android.widget.CheckBox;
+ import android.widget.FrameLayout;
++import android.widget.LinearLayout;
+ import android.widget.Spinner;
+ 
+ import androidx.annotation.NonNull;
+@@ -136,6 +139,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     public int frameRatingWindowId = -1;
+     private Win32AppWorkarounds win32AppWorkarounds;
+     private String screenEffectProfile;
++    private LinearLayout quickActions;
+ 
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+@@ -235,7 +239,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         inputControlsManager = new InputControlsManager(this);
+         xServer = new XServer(this, screenInfo);
+         xServer.setWinHandler(winHandler);
+-        final boolean[] flags = {false, shortcut != null || getIntent().hasExtra("exec_path")};
++        final boolean[] flags = {false, true};
+         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
+             @Override
+             public void onUpdateWindowContent(Window window) {
+@@ -367,6 +371,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+                 break;
+             case R.id.menu_item_toggle_fullscreen:
+                 renderer.toggleFullscreen();
++                touchpadView.postDelayed(touchpadView::refreshTransform, 50);
++                drawerLayout.closeDrawers();
++                break;
++            case R.id.menu_item_run_exe:
++                showRunExePrompt();
++                drawerLayout.closeDrawers();
++                break;
++            case R.id.menu_item_file_explorer:
++                winHandler.exec("wfm.exe", null);
+                 drawerLayout.closeDrawers();
+                 break;
+             case R.id.menu_item_task_manager:
+@@ -506,7 +519,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         if (container != null) {
+             if (container.getHUDMode() == FrameRating.Mode.FULL.ordinal()) envVars.put("X11_WND_GPU_INFO", "1");
+ 
+-            String desktopName = shortcut != null || getIntent().hasExtra("exec_path") ? "nogui" : "shell";
++            String desktopName = "nogui";
+             String guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
+             guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
+ 
+@@ -583,6 +596,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
+         renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
+         renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
++        renderer.setMagnifierZoom(preferences.getFloat("miniexe_zoom", 1.0f));
+ 
+         xServer.setRenderer(renderer);
+         rootView.addView(xServerView);
+@@ -591,7 +605,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         capturePointerOnExternalMouse = preferences.getBoolean("capture_pointer_on_external_mouse", true);
+         touchpadView = new TouchpadView(this, xServer, capturePointerOnExternalMouse);
+         touchpadView.setSensitivity(globalCursorSpeed);
+-        touchpadView.setMoveCursorToTouchpoint(preferences.getBoolean("move_cursor_to_touchpoint", false));
++        touchpadView.setMoveCursorToTouchpoint(preferences.getBoolean("move_cursor_to_touchpoint", true));
++        touchpadView.setZoomChangedCallback(() -> preferences.edit().putFloat("miniexe_zoom", renderer.getMagnifierZoom()).apply());
+         touchpadView.setFourFingersTapCallback(() -> {
+             if (!drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.openDrawer(GravityCompat.START);
+         });
+@@ -604,6 +619,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         inputControlsView.setVisibility(View.GONE);
+         rootView.addView(inputControlsView);
+ 
++        addQuickToolbar(rootView, renderer);
++
+         if (container != null && container.getHUDMode() != FrameRating.Mode.DISABLED.ordinal()) {
+             frameRating = new FrameRating(this);
+             frameRating.setMode(FrameRating.Mode.values()[container.getHUDMode()]);
+@@ -623,6 +640,51 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
+     }
+ 
++    private void showRunExePrompt() {
++        ContentDialog.prompt(this, R.string.run_exe, "D:\\", (path) -> {
++            String command = path.trim();
++            if (!command.isEmpty()) winHandler.exec(command, null);
++        });
++    }
++
++    private Button toolbarButton(String title, View.OnClickListener action) {
++        Button button = new Button(this);
++        button.setText(title);
++        button.setAllCaps(false);
++        button.setMinWidth(0);
++        button.setMinimumWidth(0);
++        button.setOnClickListener(action);
++        return button;
++    }
++
++    private void addQuickToolbar(FrameLayout rootView, GLRenderer renderer) {
++        LinearLayout toolbar = new LinearLayout(this);
++        toolbar.setOrientation(LinearLayout.HORIZONTAL);
++        toolbar.setBackgroundColor(0xCC172235);
++        int margin = (int)(8 * getResources().getDisplayMetrics().density);
++        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
++        params.setMargins(margin, margin, margin, margin);
++        toolbar.setLayoutParams(params);
++
++        quickActions = new LinearLayout(this);
++        quickActions.setOrientation(LinearLayout.HORIZONTAL);
++        toolbar.addView(toolbarButton("≡", (v) -> quickActions.setVisibility(quickActions.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE)));
++        toolbar.addView(quickActions);
++        quickActions.addView(toolbarButton(getString(R.string.run_exe), (v) -> showRunExePrompt()));
++        quickActions.addView(toolbarButton(getString(R.string.toggle_fullscreen), (v) -> {
++            renderer.toggleFullscreen();
++            touchpadView.postDelayed(touchpadView::refreshTransform, 50);
++        }));
++        quickActions.addView(toolbarButton(getString(R.string.keyboard), (v) -> AppUtils.showKeyboard(this)));
++        quickActions.addView(toolbarButton(getString(R.string.reset_zoom), (v) -> {
++            renderer.resetMagnifier();
++            preferences.edit().putFloat("miniexe_zoom", 1.0f).apply();
++        }));
++        quickActions.addView(toolbarButton(getString(R.string.file_explorer), (v) -> winHandler.exec("wfm.exe", null)));
++        quickActions.addView(toolbarButton(getString(R.string.running_apps), (v) -> (new ActiveWindowsDialog(this)).show()));
++        rootView.addView(toolbar);
++    }
++
+     private void showInputControlsDialog() {
+         final ContentDialog dialog = new ContentDialog(this, R.layout.input_controls_dialog);
+         dialog.setTitle(R.string.input_controls);
+@@ -1123,4 +1185,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         }
+         else return false;
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/com/winlator/core/AppUtils.java b/app/src/main/java/com/winlator/core/AppUtils.java
+index cac686e..b4ea60b 100644
+--- a/app/src/main/java/com/winlator/core/AppUtils.java
++++ b/app/src/main/java/com/winlator/core/AppUtils.java
+@@ -44,7 +44,7 @@ import java.util.TimerTask;
+ 
+ public abstract class AppUtils {
+     public static final String DIRECTORY_DOWNLOADS = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getPath();
+-    public static final String INTERNAL_STORAGE = "/data/data/com.winlator/storage";
++    public static final String INTERNAL_STORAGE = "/data/data/com.miniexe.android/storage";
+     private static WeakReference<Toast> globalToastReference = null;
+ 
+     public static class RestartApplicationOptions {
+diff --git a/app/src/main/java/com/winlator/core/FileUtils.java b/app/src/main/java/com/winlator/core/FileUtils.java
+index b503fc0..8700402 100644
+--- a/app/src/main/java/com/winlator/core/FileUtils.java
++++ b/app/src/main/java/com/winlator/core/FileUtils.java
+@@ -410,7 +410,7 @@ public abstract class FileUtils {
+         Intent intent;
+         if (path.startsWith("file://")) {
+             File file = new File(Uri.decode(path.replace("file://", "")));
+-            intent = new Intent(Intent.ACTION_VIEW, FileProvider.getUriForFile(activity, "com.winlator.FileProvider", file));
++            intent = new Intent(Intent.ACTION_VIEW, FileProvider.getUriForFile(activity, activity.getPackageName()+".FileProvider", file));
+             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+         }
+         else intent = new Intent(Intent.ACTION_VIEW, Uri.parse(path));
+diff --git a/app/src/main/java/com/winlator/renderer/GLRenderer.java b/app/src/main/java/com/winlator/renderer/GLRenderer.java
+index 48a8344..eb71c45 100644
+--- a/app/src/main/java/com/winlator/renderer/GLRenderer.java
++++ b/app/src/main/java/com/winlator/renderer/GLRenderer.java
+@@ -59,7 +59,10 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
+     private int cursorBackColor = 0xffffff;
+     private int cursorForeColor = 0x000000;
+     private boolean screenOffsetYRelativeToCursor = false;
+-    private float magnifierZoom = 1.0f;
++    private volatile float magnifierZoom = 1.0f;
++    private volatile float magnifierPanX = 0.0f;
++    private volatile float magnifierPanY = 0.0f;
++    private volatile boolean manualMagnifierPan = false;
+     protected short surfaceWidth;
+     protected short surfaceHeight;
+     public final EffectComposer effectComposer = new EffectComposer(this);
+@@ -134,11 +137,15 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
+         float pointerY = 0;
+         float magnifierZoom = !screenOffsetYRelativeToCursor ? this.magnifierZoom : 1.0f;
+ 
+-        if (magnifierZoom != 1.0f) {
++        if (manualMagnifierPan && magnifierZoom != 1.0f) {
++            pointerX = magnifierPanX;
++            pointerY = magnifierPanY;
++        }
++        else if (magnifierZoom != 1.0f) {
+             pointerX = Mathf.clamp(xServer.pointer.getX() * magnifierZoom - xServer.screenInfo.width * 0.5f, 0, xServer.screenInfo.width * Math.abs(1.0f - magnifierZoom));
+         }
+ 
+-        if (screenOffsetYRelativeToCursor || magnifierZoom != 1.0f) {
++        if (!manualMagnifierPan && (screenOffsetYRelativeToCursor || magnifierZoom != 1.0f)) {
+             float scaleY = magnifierZoom != 1.0f ? Math.abs(1.0f - magnifierZoom) : 0.5f;
+             float offsetY = xServer.screenInfo.height * (screenOffsetYRelativeToCursor ? 0.25f : 0.5f);
+             pointerY = Mathf.clamp(xServer.pointer.getY() * magnifierZoom - offsetY, 0, xServer.screenInfo.height * scaleY);
+@@ -402,7 +409,50 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
+     }
+ 
+     public void setMagnifierZoom(float magnifierZoom) {
+-        this.magnifierZoom = magnifierZoom;
++        this.magnifierZoom = Mathf.clamp(magnifierZoom, 1.0f, 3.0f);
++        clampMagnifierPan();
++        xServerView.requestRender();
++    }
++
++    public float getMagnifierOffsetX() {
++        if (magnifierZoom == 1.0f) return 0;
++        return manualMagnifierPan ? magnifierPanX : Mathf.clamp(xServer.pointer.getX() * magnifierZoom - xServer.screenInfo.width * 0.5f, 0, xServer.screenInfo.width * (magnifierZoom - 1.0f));
++    }
++
++    public float getMagnifierOffsetY() {
++        if (magnifierZoom == 1.0f) return 0;
++        return manualMagnifierPan ? magnifierPanY : Mathf.clamp(xServer.pointer.getY() * magnifierZoom - xServer.screenInfo.height * 0.5f, 0, xServer.screenInfo.height * (magnifierZoom - 1.0f));
++    }
++
++    private void clampMagnifierPan() {
++        magnifierPanX = Mathf.clamp(magnifierPanX, 0, xServer.screenInfo.width * (magnifierZoom - 1.0f));
++        magnifierPanY = Mathf.clamp(magnifierPanY, 0, xServer.screenInfo.height * (magnifierZoom - 1.0f));
++    }
++
++    public void zoomAt(float zoom, float centerX, float centerY) {
++        float oldZoom = magnifierZoom;
++        float oldX = getMagnifierOffsetX();
++        float oldY = getMagnifierOffsetY();
++        magnifierZoom = Mathf.clamp(zoom, 1.0f, 3.0f);
++        manualMagnifierPan = true;
++        magnifierPanX = (oldX + centerX) * magnifierZoom / oldZoom - centerX;
++        magnifierPanY = (oldY + centerY) * magnifierZoom / oldZoom - centerY;
++        clampMagnifierPan();
++        xServerView.requestRender();
++    }
++
++    public void panMagnifier(float deltaX, float deltaY) {
++        manualMagnifierPan = true;
++        magnifierPanX -= deltaX;
++        magnifierPanY -= deltaY;
++        clampMagnifierPan();
++        xServerView.requestRender();
++    }
++
++    public void resetMagnifier() {
++        magnifierZoom = 1.0f;
++        magnifierPanX = magnifierPanY = 0;
++        manualMagnifierPan = false;
+         xServerView.requestRender();
+     }
+ 
+diff --git a/app/src/main/java/com/winlator/services/ForegroundService.java b/app/src/main/java/com/winlator/services/ForegroundService.java
+index 0940581..1a5e367 100644
+--- a/app/src/main/java/com/winlator/services/ForegroundService.java
++++ b/app/src/main/java/com/winlator/services/ForegroundService.java
+@@ -33,7 +33,7 @@ public class ForegroundService extends Service {
+     private static volatile ForegroundService instance;
+     private static final String TAG = "FGService";
+ 
+-    private static final String ACTION_ENSURE_FOREGROUND = "com.winlator.action.ENSURE_FOREGROUND";
++    private static final String ACTION_ENSURE_FOREGROUND = "com.miniexe.android.action.ENSURE_FOREGROUND";
+ 
+     private static final AtomicBoolean sessionActive = new AtomicBoolean(false);
+     private static final AtomicBoolean serviceRunning = new AtomicBoolean(false);
+@@ -57,7 +57,7 @@ public class ForegroundService extends Service {
+ 
+     private NotificationUtils notificationUtils;
+     private int notificationId = -1;
+-    private static final String NOTIFICATION_ID_NAME = "winlator.FGS";
++    private static final String NOTIFICATION_ID_NAME = "miniexe.FGS";
+ 
+     // ── Container / game session lifecycle ──────────────────────────────────────────────
+     public static void startSession(Context ctx) {
+diff --git a/app/src/main/java/com/winlator/services/NotificationUtils.java b/app/src/main/java/com/winlator/services/NotificationUtils.java
+index c3f422c..87c1f28 100644
+--- a/app/src/main/java/com/winlator/services/NotificationUtils.java
++++ b/app/src/main/java/com/winlator/services/NotificationUtils.java
+@@ -12,7 +12,7 @@ import com.winlator.MainActivity;
+ import java.lang.ref.WeakReference;
+ 
+ public class NotificationUtils {
+-    private static final String CHANNEL_ID = "winlator_foreground_service";
++    private static final String CHANNEL_ID = "miniexe_foreground_service";
+     private static final String CHANNEL_NAME = "Winlator Foreground Service";
+ 
+     private final Context context;
+diff --git a/app/src/main/java/com/winlator/widget/TouchpadView.java b/app/src/main/java/com/winlator/widget/TouchpadView.java
+index 5d04f4d..df15156 100644
+--- a/app/src/main/java/com/winlator/widget/TouchpadView.java
++++ b/app/src/main/java/com/winlator/widget/TouchpadView.java
+@@ -14,6 +14,7 @@ import com.winlator.core.AppUtils;
+ import com.winlator.math.Mathf;
+ import com.winlator.math.XForm;
+ import com.winlator.renderer.ViewTransformation;
++import com.winlator.renderer.GLRenderer;
+ import com.winlator.winhandler.MouseEventFlags;
+ import com.winlator.winhandler.WinHandler;
+ import com.winlator.xserver.Pointer;
+@@ -39,6 +40,11 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+     private boolean scrolling = false;
+     private final XServer xServer;
+     private Runnable fourFingersTapCallback;
++    private Runnable zoomChangedCallback;
++    private boolean viewportGesture;
++    private float previousGestureDistance;
++    private float previousGestureCenterX;
++    private float previousGestureCenterY;
+     private final float[] xform = XForm.getInstance();
+ 
+     public TouchpadView(Context context, XServer xServer, boolean capturePointerOnExternalMouse) {
+@@ -85,6 +91,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+         else XForm.makeScale(xform, invAspect, invAspect);
+     }
+ 
++    public void refreshTransform() {
++        updateXform(getWidth(), getHeight(), xServer.screenInfo.width, xServer.screenInfo.height);
++    }
++
+     private class Finger {
+         private int x;
+         private int y;
+@@ -93,9 +103,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+         private int lastX;
+         private int lastY;
+         private final long touchTime;
++        private boolean longPressed;
+ 
+         public Finger(float x, float y) {
+-            float[] transformedPoint = XForm.transformPoint(xform, x, y);
++            float[] transformedPoint = transformTouchPoint(x, y);
+             this.x = this.startX = this.lastX = (int)transformedPoint[0];
+             this.y = this.startY = this.lastY = (int)transformedPoint[1];
+             touchTime = System.currentTimeMillis();
+@@ -104,7 +115,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+         public void update(float x, float y) {
+             lastX = this.x;
+             lastY = this.y;
+-            float[] transformedPoint = XForm.transformPoint(xform, x, y);
++            float[] transformedPoint = transformTouchPoint(x, y);
+             this.x = (int)transformedPoint[0];
+             this.y = (int)transformedPoint[1];
+         }
+@@ -134,6 +145,31 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+         }
+     }
+ 
++    private float[] transformTouchPoint(float x, float y) {
++        float[] point = XForm.transformPoint(xform, x, y);
++        GLRenderer renderer = xServer.getRenderer();
++        float zoom = renderer.getMagnifierZoom();
++        point[0] = (point[0] + renderer.getMagnifierOffsetX()) / zoom;
++        point[1] = (point[1] + renderer.getMagnifierOffsetY()) / zoom;
++        return point;
++    }
++
++    private void updateViewportGesture(MotionEvent event) {
++        if (event.getPointerCount() < 2) return;
++        float x1 = event.getX(0), y1 = event.getY(0);
++        float x2 = event.getX(1), y2 = event.getY(1);
++        float distance = (float)Math.hypot(x2 - x1, y2 - y1);
++        float[] center = XForm.transformPoint(xform, (x1 + x2) * 0.5f, (y1 + y2) * 0.5f);
++        if (previousGestureDistance > 0 && distance > 0) {
++            GLRenderer renderer = xServer.getRenderer();
++            renderer.zoomAt(renderer.getMagnifierZoom() * distance / previousGestureDistance, center[0], center[1]);
++            renderer.panMagnifier(center[0] - previousGestureCenterX, center[1] - previousGestureCenterY);
++        }
++        previousGestureDistance = distance;
++        previousGestureCenterX = center[0];
++        previousGestureCenterY = center[1];
++    }
++
+     @Override
+     public boolean onTouchEvent(MotionEvent event) {
+         int actionIndex = event.getActionIndex();
+@@ -141,6 +177,27 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+         int actionMasked = event.getActionMasked();
+         if (pointerId >= MAX_FINGERS) return true;
+ 
++        if (!event.isFromSource(InputDevice.SOURCE_MOUSE) && (actionMasked == MotionEvent.ACTION_POINTER_DOWN || viewportGesture)) {
++            if (actionMasked == MotionEvent.ACTION_POINTER_DOWN && !viewportGesture && event.getPointerCount() == 2) {
++                viewportGesture = true;
++                previousGestureDistance = 0;
++                if (xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_LEFT)) xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
++                if (xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_RIGHT)) xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
++                fingerPointerButtonLeft = fingerPointerButtonRight = null;
++            }
++            if (viewportGesture) {
++                if (actionMasked == MotionEvent.ACTION_POINTER_DOWN || actionMasked == MotionEvent.ACTION_MOVE) updateViewportGesture(event);
++                if (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_CANCEL) {
++                    viewportGesture = false;
++                    previousGestureDistance = 0;
++                    for (byte i = 0; i < MAX_FINGERS; i++) fingers[i] = null;
++                    numFingers = 0;
++                    if (zoomChangedCallback != null) zoomChangedCallback.run();
++                }
++                return true;
++            }
++        }
++
+         switch (actionMasked) {
+             case MotionEvent.ACTION_DOWN:
+             case MotionEvent.ACTION_POINTER_DOWN:
+@@ -149,10 +206,20 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+                 scrolling = false;
+                 fingers[pointerId] = new Finger(event.getX(actionIndex), event.getY(actionIndex));
+                 numFingers++;
++                if (numFingers == 1 && moveCursorToTouchpoint) {
++                    final Finger finger = fingers[pointerId];
++                    postDelayed(() -> {
++                        if (!viewportGesture && numFingers == 1 && fingers[pointerId] == finger && finger.travelDistance() < MAX_TAP_TRAVEL_DISTANCE) {
++                            xServer.injectPointerMove(finger.x, finger.y);
++                            pressPointerButtonRight(finger);
++                            finger.longPressed = true;
++                        }
++                    }, 500);
++                }
+                 break;
+             case MotionEvent.ACTION_MOVE:
+                 if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
+-                    float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
++                    float[] transformedPoint = transformTouchPoint(event.getX(), event.getY());
+                     if (isEnabled()) xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
+                 }
+                 else {
+@@ -193,7 +260,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+     private void handleFingerUp(Finger finger1) {
+         switch (numFingers) {
+             case 1:
+-                if (finger1.isTap()) {
++                if (!finger1.longPressed && finger1.isTap()) {
+                     if (moveCursorToTouchpoint) xServer.injectPointerMove(finger1.x, finger1.y);
+                     pressPointerButtonLeft(finger1);
+                 }
+@@ -218,6 +285,11 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+ 
+     private void handleFingerMove(Finger finger1) {
+         if (!isEnabled()) return;
++        if (moveCursorToTouchpoint && numFingers == 1 && !finger1.longPressed &&
++                finger1.travelDistance() >= MAX_TAP_TRAVEL_DISTANCE && fingerPointerButtonLeft == null) {
++            xServer.injectPointerMove(finger1.startX, finger1.startY);
++            pressPointerButtonLeft(finger1);
++        }
+         boolean skipPointerMove = false;
+ 
+         Finger finger2 = numFingers == 2 ? findSecondFinger(finger1) : null;
+@@ -345,6 +417,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+         this.fourFingersTapCallback = fourFingersTapCallback;
+     }
+ 
++    public void setZoomChangedCallback(Runnable zoomChangedCallback) {
++        this.zoomChangedCallback = zoomChangedCallback;
++    }
++
+     public boolean isMoveCursorToTouchpoint() {
+         return moveCursorToTouchpoint;
+     }
+@@ -377,7 +453,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+                     handled = true;
+                     break;
+                 case MotionEvent.ACTION_HOVER_MOVE:
+-                    float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
++                    float[] transformedPoint = transformTouchPoint(event.getX(), event.getY());
+                     xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
+                     handled = true;
+                     break;
+diff --git a/app/src/main/res/drawable/ic_miniexe_launcher.xml b/app/src/main/res/drawable/ic_miniexe_launcher.xml
+new file mode 100644
+index 0000000..858c247
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_miniexe_launcher.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="108dp"
++    android:height="108dp"
++    android:viewportWidth="108"
++    android:viewportHeight="108">
++    <path android:fillColor="#172235" android:pathData="M0,0h108v108h-108z" />
++    <path android:fillColor="#19B89B" android:pathData="M16,23h76v62h-76z" />
++    <path android:fillColor="#172235" android:pathData="M21,33h66v47h-66z" />
++    <path android:fillColor="#FFFFFF" android:pathData="M30,46l14,11 -14,11v-22z" />
++    <path android:fillColor="#19B89B" android:pathData="M48,65h28v5h-28z" />
++    <path android:fillColor="#FFFFFF" android:pathData="M27,27h5v3h-5z M35,27h5v3h-5z" />
++</vector>
+diff --git a/app/src/main/res/menu/xserver_menu.xml b/app/src/main/res/menu/xserver_menu.xml
+index 81fd492..f873750 100644
+--- a/app/src/main/res/menu/xserver_menu.xml
++++ b/app/src/main/res/menu/xserver_menu.xml
+@@ -3,6 +3,8 @@
+   xmlns:android="http://schemas.android.com/apk/res/android">
+     <group android:checkableBehavior="none">
+         <item android:icon="@drawable/icon_keyboard" android:id="@+id/menu_item_keyboard" android:title="@string/keyboard" />
++        <item android:id="@+id/menu_item_run_exe" android:title="@string/run_exe" />
++        <item android:id="@+id/menu_item_file_explorer" android:title="@string/file_explorer" />
+         <item android:icon="@drawable/icon_input_controls" android:id="@+id/menu_item_input_controls" android:title="@string/input_controls" />
+         <item android:icon="@drawable/icon_fullscreen" android:id="@+id/menu_item_toggle_fullscreen" android:title="@string/toggle_fullscreen" />
+         <item android:icon="@drawable/icon_task_manager" android:id="@+id/menu_item_task_manager" android:title="@string/task_manager" />
+diff --git a/app/src/main/res/values-pt/strings.xml b/app/src/main/res/values-pt/strings.xml
+index e2d342c..a2a52db 100644
+--- a/app/src/main/res/values-pt/strings.xml
++++ b/app/src/main/res/values-pt/strings.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">Winlator</string>
++    <string name="app_name">MiniEXE</string>
+     <string name="run">Executar</string>
+     <string name="edit">Editar</string>
+     <string name="remove">Remover</string>
+@@ -292,11 +292,11 @@
+     <string name="full">Completo</string>
+     <string name="renderer">Renderizador</string>
+     <string name="default_no_override">Padrão (Sem sobrescrita)</string>
+-    <string name="fgs_notification_channel_desc">Mantém o Winlator em execução em segundo plano para que uma sessão do Wine não seja interrompida pelo gerenciamento de processos em segundo plano do Android.</string>
++    <string name="fgs_notification_channel_desc">Mantém o MiniEXE em execução em segundo plano para que uma sessão do Wine não seja interrompida pelo gerenciamento de processos em segundo plano do Android.</string>
+     <string name="fgs_notification_content_container_background">A sessão do container está pausada em segundo plano</string>
+     <string name="fgs_notification_content_container_foreground">Há uma sessão de container em execução</string>
+-    <string name="fgs_notification_content_else">O Winlator está executando em segundo plano</string>
++    <string name="fgs_notification_content_else">O MiniEXE está executando em segundo plano</string>
+     <string name="enable_background_wakelock">Ativar wakelock quando o dispositivo está bloqueado</string>
+     <string name="save_mem_on_run_from_steam">Economize memória ao executar a partir do Steam</string>
+     <string name="present_mode">Modo de Apresentação</string>
+-</resources>
+\ No newline at end of file
++</resources>
+diff --git a/app/src/main/res/values-ru/strings.xml b/app/src/main/res/values-ru/strings.xml
+index 3475814..ae16096 100644
+--- a/app/src/main/res/values-ru/strings.xml
++++ b/app/src/main/res/values-ru/strings.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">Winlator</string>
++    <string name="app_name">MiniEXE</string>
+     <string name="run">Запустить</string>
+     <string name="edit">Редактировать</string>
+     <string name="remove">Удалить</string>
+@@ -292,11 +292,11 @@
+     <string name="full">Полный</string>
+     <string name="renderer">Рендерер</string>
+     <string name="default_no_override">Стандартный (без замены)</string>
+-    <string name="fgs_notification_channel_desc">Поддерживает работу Winlator в фоновом режиме, чтобы приостановленная сессия Wine не прерывалась управлением фоновыми процессами Android.</string>
++    <string name="fgs_notification_channel_desc">Поддерживает работу MiniEXE в фоновом режиме, чтобы приостановленная сессия Wine не прерывалась управлением фоновыми процессами Android.</string>
+     <string name="fgs_notification_content_container_background">Сессия контейнера приостановлена в фоновом режиме</string>
+     <string name="fgs_notification_content_container_foreground">Запущен контейнерный сеанс</string>
+-    <string name="fgs_notification_content_else">Winlator работает в фоновом режиме</string>
++    <string name="fgs_notification_content_else">MiniEXE работает в фоновом режиме</string>
+     <string name="enable_background_wakelock">Включить wakelock, когда устройство заблокировано</string>
+     <string name="save_mem_on_run_from_steam">Экономия памяти при запуске из Steam</string>
+     <string name="present_mode">Режим презентации</string>
+-</resources>
+\ No newline at end of file
++</resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 61fcd5e..e4f34e1 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,6 +1,10 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">Winlator</string>
++    <string name="app_name">MiniEXE</string>
++    <string name="run_exe">Run EXE</string>
++    <string name="file_explorer">File Explorer</string>
++    <string name="running_apps">Running Apps</string>
++    <string name="reset_zoom">Reset Zoom</string>
+     <string name="run">Run</string>
+     <string name="edit">Edit</string>
+     <string name="remove">Remove</string>
+@@ -351,10 +355,10 @@
+     <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
+     <string name="renderer">Renderer</string>
+     <string name="default_no_override">Default (No override)</string>
+-    <string name="fgs_notification_channel_desc">Keeps Winlator running in the background so a wine session is not interrupted by Android\'s background process management.</string>
++    <string name="fgs_notification_channel_desc">Keeps MiniEXE running in the background so a wine session is not interrupted by Android\'s background process management.</string>
+     <string name="fgs_notification_content_container_background">A container session is running in the background</string>
+     <string name="fgs_notification_content_container_foreground">There is a container session running</string>
+-    <string name="fgs_notification_content_else">Winlator is running in the background</string>
++    <string name="fgs_notification_content_else">MiniEXE is running in the background</string>
+     <string name="save_mem_on_run_from_steam">Save memory on run from Steam</string>
+     <string name="present_mode">Present Mode</string>
+-</resources>
+\ No newline at end of file
++</resources>
