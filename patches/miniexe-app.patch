@@ -94,7 +94,7 @@ index 2314314..7e37b9c 100644
 \ No newline at end of file
 +#endif
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-index 53fb456..04ce8ed 100644
+index 53fb456..338fcc2 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
 +++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 @@ -14,9 +14,12 @@ import android.view.Menu;
@@ -127,11 +127,12 @@ index 53fb456..04ce8ed 100644
          xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
              @Override
              public void onUpdateWindowContent(Window window) {
-@@ -367,6 +371,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -367,6 +371,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                  break;
              case R.id.menu_item_toggle_fullscreen:
                  renderer.toggleFullscreen();
 +                touchpadView.postDelayed(touchpadView::refreshTransform, 50);
++                quickActions.setVisibility(View.GONE);
 +                drawerLayout.closeDrawers();
 +                break;
 +            case R.id.menu_item_run_exe:
@@ -143,7 +144,15 @@ index 53fb456..04ce8ed 100644
                  drawerLayout.closeDrawers();
                  break;
              case R.id.menu_item_task_manager:
-@@ -506,7 +519,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -384,6 +398,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+                     magnifierView.setZoomButtonCallback((value) -> {
+                         renderer.setMagnifierZoom(Mathf.clamp(renderer.getMagnifierZoom() + value, 1.0f, 3.0f));
+                         magnifierView.setZoomValue(renderer.getMagnifierZoom());
++                        preferences.edit().putFloat("miniexe_zoom", renderer.getMagnifierZoom()).apply();
+                     });
+                     magnifierView.setZoomValue(renderer.getMagnifierZoom());
+                     magnifierView.setHideButtonCallback(() -> {
+@@ -506,7 +521,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          if (container != null) {
              if (container.getHUDMode() == FrameRating.Mode.FULL.ordinal()) envVars.put("X11_WND_GPU_INFO", "1");
  
@@ -152,7 +161,7 @@ index 53fb456..04ce8ed 100644
              String guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
              guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
  
-@@ -583,6 +596,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -583,6 +598,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
          renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
          renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
@@ -160,7 +169,7 @@ index 53fb456..04ce8ed 100644
  
          xServer.setRenderer(renderer);
          rootView.addView(xServerView);
-@@ -591,7 +605,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -591,7 +607,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          capturePointerOnExternalMouse = preferences.getBoolean("capture_pointer_on_external_mouse", true);
          touchpadView = new TouchpadView(this, xServer, capturePointerOnExternalMouse);
          touchpadView.setSensitivity(globalCursorSpeed);
@@ -170,7 +179,7 @@ index 53fb456..04ce8ed 100644
          touchpadView.setFourFingersTapCallback(() -> {
              if (!drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.openDrawer(GravityCompat.START);
          });
-@@ -604,6 +619,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -604,6 +621,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          inputControlsView.setVisibility(View.GONE);
          rootView.addView(inputControlsView);
  
@@ -179,7 +188,7 @@ index 53fb456..04ce8ed 100644
          if (container != null && container.getHUDMode() != FrameRating.Mode.DISABLED.ordinal()) {
              frameRating = new FrameRating(this);
              frameRating.setMode(FrameRating.Mode.values()[container.getHUDMode()]);
-@@ -623,6 +640,51 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -623,6 +642,52 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
      }
  
@@ -217,6 +226,7 @@ index 53fb456..04ce8ed 100644
 +        quickActions.addView(toolbarButton(getString(R.string.toggle_fullscreen), (v) -> {
 +            renderer.toggleFullscreen();
 +            touchpadView.postDelayed(touchpadView::refreshTransform, 50);
++            quickActions.setVisibility(View.GONE);
 +        }));
 +        quickActions.addView(toolbarButton(getString(R.string.keyboard), (v) -> AppUtils.showKeyboard(this)));
 +        quickActions.addView(toolbarButton(getString(R.string.reset_zoom), (v) -> {
@@ -231,7 +241,7 @@ index 53fb456..04ce8ed 100644
      private void showInputControlsDialog() {
          final ContentDialog dialog = new ContentDialog(this, R.layout.input_controls_dialog);
          dialog.setTitle(R.string.input_controls);
-@@ -1123,4 +1185,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -1123,4 +1188,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
          else return false;
      }
