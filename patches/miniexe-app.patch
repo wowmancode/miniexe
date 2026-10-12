@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index 7690275..9948ee4 100644
+index 7690275..45ecf97 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
 @@ -5,7 +5,7 @@ android {
@@ -7,7 +7,7 @@ index 7690275..9948ee4 100644
  
      defaultConfig {
 -        applicationId 'com.winlator'
-+        applicationId 'com.miniexe.android'
++        applicationId 'com.miniexes'
          minSdkVersion 26
          targetSdkVersion 28
          versionCode 33
@@ -33,6 +33,66 @@ index 1262c0d..4bfbb75 100644
              android:exported="false"
              android:grantUriPermissions="true">
  
+diff --git a/app/src/main/cpp/gladiorenderer/include/gladio.h b/app/src/main/cpp/gladiorenderer/include/gladio.h
+index 3563172..db21138 100644
+--- a/app/src/main/cpp/gladiorenderer/include/gladio.h
++++ b/app/src/main/cpp/gladiorenderer/include/gladio.h
+@@ -13,7 +13,7 @@
+ #define THREAD_POOL_NUM_THREADS 4
+ #define PIXEL_READ_CACHE_SKIP_FRAMES 3
+ #define SKIP_GL_FINISH 1
+-#define X11_SERVER_PATH "/data/data/com.winlator/files/rootfs/tmp/.X11-unix/X0"
++#define X11_SERVER_PATH "/data/data/com.miniexes/files/rootfs/tmp/.X11-unix/X0"
+ 
+ #define GL_STRING_VERSION "3.3"
+ #define GL_STRING_RENDERER "Gladio"
+@@ -297,4 +297,4 @@ static inline uint8_t indexOfGLTarget(GLenum target) {
+     }
+ }
+ 
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/app/src/main/cpp/vortekrenderer/include/vortek.h b/app/src/main/cpp/vortekrenderer/include/vortek.h
+index 5292644..361701a 100644
+--- a/app/src/main/cpp/vortekrenderer/include/vortek.h
++++ b/app/src/main/cpp/vortekrenderer/include/vortek.h
+@@ -5,7 +5,7 @@
+ #define MEMORY_POOL_MAX_SIZE 65536
+ #define SERVER_RING_BUFFER_SIZE 4194304
+ #define CLIENT_RING_BUFFER_SIZE 262144
+-#define VORTEK_SERVER_PATH "/data/data/com.winlator/files/rootfs/tmp/.vortek/V0"
++#define VORTEK_SERVER_PATH "/data/data/com.miniexes/files/rootfs/tmp/.vortek/V0"
+ #define VK_HANDLE_BYTE_COUNT 8
+ #define THREAD_POOL_NUM_THREADS 8
+ 
+@@ -264,4 +264,4 @@ static inline int vt_recv(RingBuffer* ring, char** inputBuffer, int* bufferSize,
+     return requestCode;
+ }
+ 
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/app/src/main/cpp/winlator/include/winlator.h b/app/src/main/cpp/winlator/include/winlator.h
+index 2314314..7e37b9c 100644
+--- a/app/src/main/cpp/winlator/include/winlator.h
++++ b/app/src/main/cpp/winlator/include/winlator.h
+@@ -11,7 +11,7 @@
+ #define BITMASK_UNSET(bits, flag) bits &= ~flag
+ #define GETEXP(x) (31 - __builtin_clz(x))
+ 
+-#define APP_CACHE_DIR "/data/data/com.winlator/cache"
++#define APP_CACHE_DIR "/data/data/com.miniexes/cache"
+ #define LIBVULKAN_PATH "/system/lib64/libvulkan.so"
+ 
+ #define CLOSEFD(x) \
+@@ -60,4 +60,4 @@ static inline pid_t currentThreadId() {
+     while (0)
+ #endif
+ 
+-#endif
+\ No newline at end of file
++#endif
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 index 53fb456..04ce8ed 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
@@ -179,7 +239,7 @@ index 53fb456..04ce8ed 100644
 \ No newline at end of file
 +}
 diff --git a/app/src/main/java/com/winlator/core/AppUtils.java b/app/src/main/java/com/winlator/core/AppUtils.java
-index cac686e..b4ea60b 100644
+index cac686e..ab93bf4 100644
 --- a/app/src/main/java/com/winlator/core/AppUtils.java
 +++ b/app/src/main/java/com/winlator/core/AppUtils.java
 @@ -44,7 +44,7 @@ import java.util.TimerTask;
@@ -187,7 +247,7 @@ index cac686e..b4ea60b 100644
  public abstract class AppUtils {
      public static final String DIRECTORY_DOWNLOADS = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getPath();
 -    public static final String INTERNAL_STORAGE = "/data/data/com.winlator/storage";
-+    public static final String INTERNAL_STORAGE = "/data/data/com.miniexe.android/storage";
++    public static final String INTERNAL_STORAGE = "/data/data/com.miniexes/storage";
      private static WeakReference<Toast> globalToastReference = null;
  
      public static class RestartApplicationOptions {
@@ -291,7 +351,7 @@ index 48a8344..eb71c45 100644
      }
  
 diff --git a/app/src/main/java/com/winlator/services/ForegroundService.java b/app/src/main/java/com/winlator/services/ForegroundService.java
-index 0940581..1a5e367 100644
+index 0940581..9aee868 100644
 --- a/app/src/main/java/com/winlator/services/ForegroundService.java
 +++ b/app/src/main/java/com/winlator/services/ForegroundService.java
 @@ -33,7 +33,7 @@ public class ForegroundService extends Service {
@@ -299,7 +359,7 @@ index 0940581..1a5e367 100644
      private static final String TAG = "FGService";
  
 -    private static final String ACTION_ENSURE_FOREGROUND = "com.winlator.action.ENSURE_FOREGROUND";
-+    private static final String ACTION_ENSURE_FOREGROUND = "com.miniexe.android.action.ENSURE_FOREGROUND";
++    private static final String ACTION_ENSURE_FOREGROUND = "com.miniexes.action.ENSURE_FOREGROUND";
  
      private static final AtomicBoolean sessionActive = new AtomicBoolean(false);
      private static final AtomicBoolean serviceRunning = new AtomicBoolean(false);

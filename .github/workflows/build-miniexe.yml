@@ -21,6 +21,12 @@ jobs:
           git -C app apply --check ../patches/miniexe-app.patch
           git -C app apply ../patches/miniexe-app.patch
 
+      - name: Relocate bundled runtime paths
+        run: |
+          python3 -m venv "$RUNNER_TEMP/miniexe-tools"
+          "$RUNNER_TEMP/miniexe-tools/bin/pip" install zstandard==0.25.0
+          "$RUNNER_TEMP/miniexe-tools/bin/python" scripts/relocate-assets.py app/app/src/main/assets
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -51,7 +57,7 @@ jobs:
           set -euo pipefail
           apk=app/app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.miniexe.android'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.miniexes'"
           unzip -Z1 "$apk" | grep -F 'lib/arm64-v8a/libwinlator.so'
           sha256sum "$apk"
           du -h "$apk"
