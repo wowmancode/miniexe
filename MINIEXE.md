@@ -11,10 +11,11 @@ For a local build with those SDK components installed:
 ```sh
 git submodule update --init --depth 1 app
 git -C app apply ../patches/miniexe-app.patch
-python3 -m pip install zstandard==0.25.0
-python3 scripts/relocate-assets.py app/app/src/main/assets
+python3 -m venv .venv
+.venv/bin/pip install zstandard==0.25.0
+.venv/bin/python scripts/relocate-assets.py app/app/src/main/assets
 cd app
-./gradlew :app:assembleDebug
+bash gradlew :app:assembleDebug
 ```
 
 The APK is under `app/app/build/outputs/apk/debug/`.
