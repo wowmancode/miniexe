@@ -134,6 +134,16 @@ checked; no device test yet).
   catalog asset, and small hooks in `MiniHomeFragment` and
   `MiniSettingsFragment`.
 
+First device report (2026-10-12): VC++ 2012 exited 0; .NET 4.0 never
+started. Wine's `start.exe` failed before the installer process existed (no
+`init_peb` line in the log). Two deviations from winetricks were fixed: the
+temporary Windows version is now `winxp64` (winetricks' choice for 64-bit
+prefixes) instead of `winxp`, and installers are now run directly from the
+batch file rather than via `start /wait`. Wine's `cmd` waits for GUI
+programs in batch mode and passes the original command line, which preserves
+`/c:"install.exe /q"`. The install log now records each command line and its
+exit code. Re-test .NET 4.0 after this build.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft
