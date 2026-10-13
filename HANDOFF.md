@@ -87,6 +87,10 @@ Winlator until the patch is applied.
   `MiniHomeFragment.addContainerSection`, and
   `XServerDisplayActivity.getActiveContainerId`.
 
+CI build for this change passed:
+<https://github.com/wowmancode/miniexe/actions/runs/38328736344> (APK built and
+checked; no device test yet).
+
 ### Box86: requested, not added
 
 Box86 was requested in the same change and deliberately not implemented:
