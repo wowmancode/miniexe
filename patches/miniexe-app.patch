@@ -4092,10 +4092,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..23346b7 100644
+index 61fcd5e..3128702 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,71 @@
+@@ -1,6 +1,70 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -4152,7 +4152,6 @@ index 61fcd5e..23346b7 100644
 +    <string name="deps_copy">Copy</string>
 +    <string name="deps_copied">Copied to clipboard</string>
 +    <string name="deps_share">Share</string>
-+    <string name="windows_version">Windows version</string>
 +    <string name="windows_version_button">Windows version: %1$s</string>
 +    <string name="windows_version_applied">Windows version changed. It applies to programs started from now on.</string>
 +    <string name="windows_version_applied_live">Windows version changed in the running session. Restart the program to see it.</string>
@@ -4168,7 +4167,7 @@ index 61fcd5e..23346b7 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +416,10 @@
+@@ -351,10 +415,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>

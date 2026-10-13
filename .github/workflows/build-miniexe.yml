@@ -54,7 +54,14 @@ jobs:
         run: |
           chmod +x ./gradlew
           printf '\norg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m\n' >> gradle.properties
-          ./gradlew :app:assembleDebug --no-daemon --max-workers=2 --stacktrace
+          set -o pipefail
+          if ! ./gradlew :app:assembleDebug --no-daemon --max-workers=2 --stacktrace 2>&1 | tee "$RUNNER_TEMP/gradle.log"; then
+            # Surface compile and resource errors as annotations (readable through the API).
+            grep -E "error:|ERROR:|What went wrong|Duplicate resources|e: " -A2 "$RUNNER_TEMP/gradle.log" | head -40 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
 
       - name: Verify APK contents
         run: |
