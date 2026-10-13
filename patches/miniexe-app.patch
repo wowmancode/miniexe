@@ -35,10 +35,10 @@ index 1262c0d..4bfbb75 100644
  
 diff --git a/app/src/main/assets/miniexe/dependencies.json b/app/src/main/assets/miniexe/dependencies.json
 new file mode 100644
-index 0000000..b0b34c7
+index 0000000..45a6588
 --- /dev/null
 +++ b/app/src/main/assets/miniexe/dependencies.json
-@@ -0,0 +1,609 @@
+@@ -0,0 +1,623 @@
 +{
 + "categories": [
 +  {
@@ -124,7 +124,11 @@ index 0000000..b0b34c7
 +     "min": 1
 +    }
 +   },
-+   "debug": "+process,+server"
++   "debug": "+process",
++   "diagEnv": [
++    "BOX64_LOG=1",
++    "BOX64_SHOWSEGV=1"
++   ]
 +  },
 +  {
 +   "id": "dotnet40",
@@ -165,10 +169,15 @@ index 0000000..b0b34c7
 +     "min": 1
 +    }
 +   },
-+   "debug": "+process,+server",
++   "debug": "+process,+virtual",
 +   "fallbackCommands": [
-+    "extrac32.exe /Y /E /L {tmp} {cache}\\dotNetFx40_Full_x86_x64.cab",
-+    "if exist {tmp}\\install.exe ({tmp}\\install.exe /q) else ({tmp}\\Setup.exe /q /norestart)"
++    "@cabs dotNetFx40_Full_x86_x64.exe",
++    "if exist {tmp}\\install.exe ({tmp}\\install.exe /q) else (if exist {tmp}\\Setup.exe ({tmp}\\Setup.exe /q /norestart) else (echo   no install.exe or Setup.exe was extracted & cmd.exe /c exit 2))"
++   ],
++   "diagEnv": [
++    "BOX64_LOG=1",
++    "BOX64_SHOWSEGV=1",
++    "BOX64_DLSYM_ERROR=1"
 +   ]
 +  },
 +  {
@@ -214,10 +223,15 @@ index 0000000..b0b34c7
 +     "min": 378389
 +    }
 +   },
-+   "debug": "+process,+server",
++   "debug": "+process,+virtual",
 +   "fallbackCommands": [
-+    "extrac32.exe /Y /E /L {tmp} {cache}\\dotnetfx45_full_x86_x64.cab",
-+    "if exist {tmp}\\install.exe ({tmp}\\install.exe /q) else ({tmp}\\Setup.exe /q /norestart)"
++    "@cabs dotnetfx45_full_x86_x64.exe",
++    "if exist {tmp}\\install.exe ({tmp}\\install.exe /q) else (if exist {tmp}\\Setup.exe ({tmp}\\Setup.exe /q /norestart) else (echo   no install.exe or Setup.exe was extracted & cmd.exe /c exit 2))"
++   ],
++   "diagEnv": [
++    "BOX64_LOG=1",
++    "BOX64_SHOWSEGV=1",
++    "BOX64_DLSYM_ERROR=1"
 +   ]
 +  },
 +  {
@@ -1179,10 +1193,10 @@ index 0000000..77479ef
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..e2a4e48
+index 0000000..0850b16
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,661 @@
+@@ -0,0 +1,811 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1264,6 +1278,8 @@ index 0000000..e2a4e48
 +        public final boolean removeMono;
 +        public final String debug;
 +        public final List<String> fallbackCommands;
++        /** Extra environment for the traced first attempt (e.g. Box64 logging). */
++        public final List<String> diagEnv;
 +        public final List<String> requires;
 +        public final List<String> replaces;
 +        public final List<String> conflicts;
@@ -1284,6 +1300,7 @@ index 0000000..e2a4e48
 +            removeMono = json.optBoolean("removeMono");
 +            debug = json.optString("debug", "");
 +            fallbackCommands = strings(json.optJSONArray("fallbackCommands"));
++            diagEnv = strings(json.optJSONArray("diagEnv"));
 +            requires = strings(json.optJSONArray("requires"));
 +            replaces = strings(json.optJSONArray("replaces"));
 +            conflicts = strings(json.optJSONArray("conflicts"));
@@ -1585,20 +1602,149 @@ index 0000000..e2a4e48
 +    }
 +
 +    /**
-+     * For downloads marked tryExtractCab, copies out the embedded cabinet once (or records that
-+     * there is none) so the install script's fallback can unpack it with Wine's extrac32.
++     * For downloads marked tryExtractCab, copies every embedded cabinet into "<file>.cabs/" once,
++     * naming members of a spanned set by the names their headers expect, and writes a summary to
++     * "<file>.cabs/info.txt". Root cabinets (not continuations) are listed in "roots.txt" so the
++     * install script can unpack each with Wine's extrac32, which follows spanned sets on its own.
 +     */
 +    public static void prepareCabs(Context context, Item item) {
 +        for (Download download : item.downloads) {
 +            if (!download.tryExtractCab) continue;
 +            File file = cacheFile(context, item, download);
-+            File cab = cabFile(file);
-+            File none = new File(file.getPath() + ".nocab");
-+            if (!file.isFile() || cab.isFile() || none.isFile()) continue;
-+            if (!extractEmbeddedCab(file, cab)) {
-+                cab.delete();
-+                FileUtils.writeString(none, "no embedded cabinet");
++            File dir = cabsDir(file);
++            if (!file.isFile() || new File(dir, "roots.txt").isFile()) continue;
++            FileUtils.delete(dir);
++            dir.mkdirs();
++            List<CabInfo> cabs = scanCabs(file);
++            StringBuilder info = new StringBuilder();
++            StringBuilder roots = new StringBuilder();
++            info.append(cabs.size()).append(" embedded cabinet(s) in ").append(file.getName()).append('\n');
++            String expectedName = null;
++            int rootIndex = 0;
++            for (CabInfo cab : cabs) {
++                String name;
++                if (cab.hasPrev && expectedName != null) name = expectedName;
++                else name = "cab" + (rootIndex++) + ".cab";
++                if (!cab.hasPrev) roots.append(name).append('\n');
++                boolean ok = copyRange(file, cab.offset, cab.size, new File(dir, name));
++                info.append(String.format(Locale.ENGLISH,
++                        "  %s offset=%d size=%d files=%d folders=%d flags=%d set=%d index=%d comp=%s prev=%s next=%s%s\n",
++                        name, cab.offset, cab.size, cab.files, cab.folders, cab.flags, cab.setId, cab.index,
++                        cab.compression, cab.prevName, cab.nextName, ok ? "" : " COPY-FAILED"));
++                expectedName = cab.hasNext && !cab.nextName.isEmpty() ? cab.nextName : null;
 +            }
++            FileUtils.writeString(new File(dir, "info.txt"), info.toString());
++            FileUtils.writeString(new File(dir, "roots.txt"), roots.toString());
++        }
++    }
++
++    private static File cabsDir(File download) {
++        return new File(download.getPath() + ".cabs");
++    }
++
++    static final class CabInfo {
++        long offset, size;
++        int flags, files, folders, setId, index;
++        boolean hasPrev, hasNext;
++        String prevName = "", nextName = "", compression = "";
++    }
++
++    private static String readCString(RandomAccessFile file) throws IOException {
++        StringBuilder sb = new StringBuilder();
++        for (int i = 0; i < 256; i++) {
++            int c = file.read();
++            if (c <= 0) break;
++            sb.append((char)c);
++        }
++        return sb.toString();
++    }
++
++    /** Finds every valid, non-overlapping Microsoft Cabinet in a file. */
++    static List<CabInfo> scanCabs(File source) {
++        ArrayList<CabInfo> result = new ArrayList<>();
++        try (RandomAccessFile file = new RandomAccessFile(source, "r")) {
++            long length = file.length();
++            byte[] window = new byte[1 << 20];
++            ByteBuffer header = ByteBuffer.allocate(36).order(ByteOrder.LITTLE_ENDIAN);
++            long skipUntil = 0;
++            for (long base = 0; base < length; base += window.length - 36) {
++                file.seek(base);
++                int read = file.read(window);
++                if (read <= 0) break;
++                for (int i = 0; i + 36 <= read; i++) {
++                    long offset = base + i;
++                    if (offset < skipUntil) continue;
++                    if (window[i] != 'M' || window[i + 1] != 'S' || window[i + 2] != 'C' || window[i + 3] != 'F') continue;
++                    header.clear();
++                    header.put(window, i, 36).flip();
++                    long size = header.getInt(8) & 0xffffffffL;
++                    long filesOffset = header.getInt(16) & 0xffffffffL;
++                    int minor = header.get(24), major = header.get(25);
++                    if (header.getInt(4) != 0 || header.getInt(12) != 0 || header.getInt(20) != 0) continue;
++                    if (major != 1 || minor != 3 || size < 36 || offset + size > length || filesOffset >= size) continue;
++                    CabInfo cab = new CabInfo();
++                    cab.offset = offset;
++                    cab.size = size;
++                    cab.folders = header.getShort(26) & 0xffff;
++                    cab.files = header.getShort(28) & 0xffff;
++                    cab.flags = header.getShort(30) & 0xffff;
++                    cab.setId = header.getShort(32) & 0xffff;
++                    cab.index = header.getShort(34) & 0xffff;
++                    cab.hasPrev = (cab.flags & 1) != 0;
++                    cab.hasNext = (cab.flags & 2) != 0;
++                    long pos = offset + 36;
++                    int reserveFolder = 0;
++                    if ((cab.flags & 4) != 0) {
++                        file.seek(pos);
++                        int cbHeader = file.read() | (file.read() << 8);
++                        reserveFolder = file.read();
++                        file.read();
++                        pos += 4 + cbHeader;
++                    }
++                    file.seek(pos);
++                    if (cab.hasPrev) { cab.prevName = readCString(file); readCString(file); }
++                    if (cab.hasNext) { cab.nextName = readCString(file); readCString(file); }
++                    StringBuilder comp = new StringBuilder();
++                    for (int f = 0; f < Math.min(cab.folders, 8); f++) {
++                        file.read(new byte[6]);
++                        int type = file.read() | (file.read() << 8);
++                        if (reserveFolder > 0) file.skipBytes(reserveFolder);
++                        if (comp.length() > 0) comp.append(',');
++                        switch (type & 0xf) {
++                            case 0: comp.append("none"); break;
++                            case 1: comp.append("mszip"); break;
++                            case 2: comp.append("quantum"); break;
++                            case 3: comp.append("lzx"); break;
++                            default: comp.append("type").append(type & 0xf);
++                        }
++                    }
++                    cab.compression = comp.toString();
++                    result.add(cab);
++                    skipUntil = offset + size;
++                }
++                if (read < window.length) break;
++            }
++        }
++        catch (IOException ignored) {}
++        return result;
++    }
++
++    private static boolean copyRange(File source, long offset, long size, File out) {
++        try (RandomAccessFile file = new RandomAccessFile(source, "r");
++             OutputStream output = new FileOutputStream(out)) {
++            file.seek(offset);
++            byte[] buffer = new byte[65536];
++            long remaining = size;
++            while (remaining > 0) {
++                int n = file.read(buffer, 0, (int)Math.min(buffer.length, remaining));
++                if (n <= 0) return false;
++                output.write(buffer, 0, n);
++                remaining -= n;
++            }
++            return true;
++        }
++        catch (IOException e) {
++            return false;
 +        }
 +    }
 +
@@ -1810,13 +1956,31 @@ index 0000000..e2a4e48
 +    private static void appendCommands(StringBuilder bat, Item item, List<String> commands, String cacheDir, String tmpDir, File installDir, String log, String suffix, boolean allowDebug) throws IOException {
 +        int index = 0;
 +        boolean debug = allowDebug && !item.debug.isEmpty();
++        List<String> expanded = new ArrayList<>();
 +        for (String command : commands) {
++            if (command.startsWith("@cabs ")) {
++                // "@cabs <download file>": log the cabinet summary and unpack each root cabinet.
++                String fileName = command.substring(6).trim();
++                File cabs = new File(installDir, "cache/" + item.id + "/" + fileName + ".cabs");
++                for (String infoLine : FileUtils.readLines(new File(cabs, "info.txt"))) {
++                    bat.append("echo   ").append(ascii(infoLine)).append(" >> ").append(log).append("\r\n");
++                }
++                for (String root : FileUtils.readLines(new File(cabs, "roots.txt"), true)) {
++                    expanded.add("extrac32.exe /Y /E /L {tmp} {cache}\\" + fileName + ".cabs\\" + root.trim());
++                }
++                expanded.add("dir /b /s {tmp} >> " + log);
++            }
++            else expanded.add(command);
++        }
++        for (String command : expanded) {
 +            String line = command.replace("{cache}", cacheDir).replace("{tmp}", tmpDir);
 +            bat.append("echo   run: ").append(ascii(line)).append(" >> ").append(log).append("\r\n");
 +            if (debug && !line.startsWith("reg ")) {
 +                String name = "run-" + item.id + "-" + (index++) + suffix + ".bat";
-+                String inner = "@echo off\r\n" + line + "\r\nexit /b %errorlevel%\r\n";
-+                FileUtils.write(new File(installDir, name), inner.getBytes(StandardCharsets.US_ASCII));
++                StringBuilder inner = new StringBuilder("@echo off\r\n");
++                for (String env : item.diagEnv) inner.append("set ").append(env).append("\r\n");
++                inner.append(line).append("\r\nexit /b %errorlevel%\r\n");
++                FileUtils.write(new File(installDir, name), inner.toString().getBytes(StandardCharsets.US_ASCII));
 +                bat.append("echo   (with WINEDEBUG=").append(item.debug).append(", see Download/MiniEXE/logs.txt) >> ").append(log).append("\r\n");
 +                bat.append("set WINEDEBUG=%MINIEXE_WINEDEBUG%,").append(item.debug).append("\r\n");
 +                bat.append("cmd.exe /c C:\\miniexe\\").append(name).append("\r\n");

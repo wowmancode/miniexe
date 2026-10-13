@@ -174,6 +174,20 @@ cannot be started, a fallback copies out its embedded cabinet on the
 Android side (`tryExtractCab`, `prepareCabs`), unpacks it with `extrac32`,
 and runs the extracted `install.exe` or `Setup.exe` silently.
 
+Fifth report (wineserver trace, 2026-10-13): `new_process` for the .NET 4.0
+self-extractor succeeds (i386, pid assigned), but its first thread is killed
+with exit code 1 before it sends any request (no `get_startup_info`), i.e.
+the child dies inside the Unix-side Wine/Box64 startup before any Windows
+code runs. VC++ i386 installers pass the same point. The fallback ran, but
+`extrac32` reported "Could not extract cab file" for the first embedded
+cabinet. Changes: the app now copies out every embedded cabinet into
+`<download>.cabs/` (spanned members named as their headers expect) and
+logs each header (size, files, flags, compression, prev/next) to
+`install-log.txt`; the fallback unpacks each root cabinet and lists the
+extracted files. The first attempt now runs with `BOX64_LOG=1`,
+`BOX64_SHOWSEGV=1`, `BOX64_DLSYM_ERROR=1` and `WINEDEBUG=+process,+virtual`
+(no `+server`, which produced 24 MB) to capture why the child exits.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft
