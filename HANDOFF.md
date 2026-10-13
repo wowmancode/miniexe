@@ -248,6 +248,18 @@ through the symlink. Every install now copies the item's cached files to
 `C:\miniexe\stage\<id>` first, runs from there, and removes the copy.
 The .NET probes, fallback and diagnostic tracing were removed.
 
+**Root cause found (twelfth report).** Staging alone did not help: the
+staged `dotNetFx40_Full_x86_x64.exe` failed again while `setupcopy.exe`
+had worked. Winlator's `assets/box64/default.box64rc` contains
+`BOX64_EXIT=1` rules for `[*dotnetfx*]`, `[*ndp452-kb*]`, `[*ndp462-kb*]`,
+`[*ndp472-kb*]` and `[*ndp48-x86-x64*]`, so Box64 kills those processes by
+name before Wine starts — the silent exit 1 seen in every trace. The cache
+symlink was not the cause. Catalog downloads can now set `stageAs`; the
+.NET 3.5/4.0/4.5 installers are staged as `netfx35setup.exe`,
+`netfx40setup.exe` and `netfx45setup.exe`. The upstream rule is kept, so
+user-launched installers with those names are still blocked; consider
+surfacing that (or removing the rule) after testing .NET under Box64.
+
 **Windows version.** Wine uses HKCU\Software\Wine "Version" (winecfg)
 when present and only otherwise the HKLM NT CurrentVersion keys (what
 Winlator's container setting writes), and registry files edited while a

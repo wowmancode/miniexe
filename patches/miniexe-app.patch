@@ -35,10 +35,10 @@ index 1262c0d..4bfbb75 100644
  
 diff --git a/app/src/main/assets/miniexe/dependencies.json b/app/src/main/assets/miniexe/dependencies.json
 new file mode 100644
-index 0000000..bd2d6c5
+index 0000000..f93bef3
 --- /dev/null
 +++ b/app/src/main/assets/miniexe/dependencies.json
-@@ -0,0 +1,597 @@
+@@ -0,0 +1,600 @@
 +{
 + "categories": [
 +  {
@@ -111,11 +111,12 @@ index 0000000..bd2d6c5
 +    {
 +     "url": "https://download.microsoft.com/download/2/0/e/20e90413-712f-438c-988e-fdaa79a8ac3d/dotnetfx35.exe",
 +     "sha256": "0582515bde321e072f8673e829e175ed2e7a53e803127c50253af76528e66bc1",
-+     "file": "dotnetfx35.exe"
++     "file": "dotnetfx35.exe",
++     "stageAs": "netfx35setup.exe"
 +    }
 +   ],
 +   "commands": [
-+    "{cache}\\dotnetfx35.exe /lang:ENU /q /norestart"
++    "{cache}\\netfx35setup.exe /lang:ENU /q /norestart"
 +   ],
 +   "verify": {
 +    "regDword": {
@@ -145,11 +146,12 @@ index 0000000..bd2d6c5
 +    {
 +     "url": "https://download.microsoft.com/download/9/5/A/95A9616B-7A37-4AF6-BC36-D6EA96C8DAAE/dotNetFx40_Full_x86_x64.exe",
 +     "sha256": "65e064258f2e418816b304f646ff9e87af101e4c9552ab064bb74d281c38659f",
-+     "file": "dotNetFx40_Full_x86_x64.exe"
++     "file": "dotNetFx40_Full_x86_x64.exe",
++     "stageAs": "netfx40setup.exe"
 +    }
 +   ],
 +   "commands": [
-+    "{cache}\\dotNetFx40_Full_x86_x64.exe /passive /norestart",
++    "{cache}\\netfx40setup.exe /passive /norestart",
 +    "reg add \"HKLM\\Software\\Microsoft\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f",
 +    "reg add \"HKLM\\Software\\Wow6432Node\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f"
 +   ],
@@ -192,11 +194,12 @@ index 0000000..bd2d6c5
 +    {
 +     "url": "https://download.microsoft.com/download/b/a/4/ba4a7e71-2906-4b2d-a0e1-80cf16844f5f/dotnetfx45_full_x86_x64.exe",
 +     "sha256": "a04d40e217b97326d46117d961ec4eda455e087b90637cb33dd6cc4a2c228d83",
-+     "file": "dotnetfx45_full_x86_x64.exe"
++     "file": "dotnetfx45_full_x86_x64.exe",
++     "stageAs": "netfx45setup.exe"
 +    }
 +   ],
 +   "commands": [
-+    "{cache}\\dotnetfx45_full_x86_x64.exe /passive /norestart",
++    "{cache}\\netfx45setup.exe /passive /norestart",
 +    "reg add \"HKLM\\Software\\Microsoft\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f",
 +    "reg add \"HKLM\\Software\\Wow6432Node\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f"
 +   ],
@@ -1214,10 +1217,10 @@ index 0000000..1204fb3
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..6d61cef
+index 0000000..80075f0
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,938 @@
+@@ -0,0 +1,948 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1279,6 +1282,11 @@ index 0000000..6d61cef
 +        public final boolean tryExtractCab;
 +        /** Also write "<file>.probe.exe": the first 512 KB only, to test whether the stub starts without its payload. */
 +        public final boolean probe;
++        /**
++         * Name to give the staged copy. Winlator's default.box64rc has BOX64_EXIT=1 rules for
++         * *dotnetfx*, *ndp48-x86-x64* and similar names, which kill those installers at start.
++         */
++        public final String stageAs;
 +
 +        Download(JSONObject json) {
 +            url = json.optString("url");
@@ -1287,6 +1295,7 @@ index 0000000..6d61cef
 +            extractCab = json.optBoolean("extractCab");
 +            tryExtractCab = json.optBoolean("tryExtractCab");
 +            probe = json.optBoolean("probe");
++            stageAs = json.optString("stageAs", "");
 +        }
 +    }
 +
@@ -2000,9 +2009,8 @@ index 0000000..6d61cef
 +        Item mono = catalog.get("mono");
 +        for (Item item : items) {
 +            new File(statusDir, item.id + ".txt").delete();
-+            // Installers run from a copy inside the prefix: Wine could not start the .NET 4 stub
-+            // through the cache symlink (it lives outside the rootfs), while the same file copied
-+            // into drive C: runs normally.
++            // Installers run from a copy inside the prefix, renamed where a Box64 rule would
++            // otherwise kill them by name (see Download.stageAs).
 +            String cacheDir = "C:\\miniexe\\stage\\" + item.id;
 +            String tmpDir = "C:\\miniexe\\tmp\\" + item.id;
 +            bat.append("\r\nrem ---- ").append(item.id).append("\r\n");
@@ -2014,6 +2022,11 @@ index 0000000..6d61cef
 +            if (!item.downloads.isEmpty()) {
 +                bat.append("if not exist ").append(cacheDir).append(" mkdir ").append(cacheDir).append("\r\n");
 +                bat.append("copy /Y C:\\miniexe\\cache\\").append(item.id).append("\\*.* ").append(cacheDir).append("\\ >nul\r\n");
++                for (Download download : item.downloads) {
++                    if (download.stageAs.isEmpty()) continue;
++                    bat.append("move /Y ").append(cacheDir).append("\\").append(download.file).append(' ')
++                       .append(cacheDir).append("\\").append(download.stageAs).append(" >nul\r\n");
++                }
 +            }
 +            if (item.removeMono && monoPresent && mono != null && !mono.downloads.isEmpty()) {
 +                bat.append("echo   removing Wine Mono >> ").append(log).append("\r\n");
