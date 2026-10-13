@@ -1217,10 +1217,10 @@ index 0000000..1204fb3
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..80075f0
+index 0000000..38434b6
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,948 @@
+@@ -0,0 +1,956 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1390,6 +1390,14 @@ index 0000000..80075f0
 +    public static void exportActiveInstallLog(Context context) {
 +        Container container = activeContainer;
 +        if (container != null) exportInstallLog(context, container);
++    }
++
++    /** True while an install script started from this app has not yet written DONE. */
++    public static boolean isInstallRunning() {
++        File file = activeProgressFile;
++        if (file == null) return false;
++        String line = file.isFile() ? FileUtils.readString(file).trim() : "";
++        return !line.startsWith("DONE");
 +    }
 +
 +    public static void clearActiveProgress() {
@@ -2912,7 +2920,7 @@ index 0000000..ae57d03
 +    }
 +}
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-index 53fb456..0fdf5eb 100644
+index 53fb456..d9975c4 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
 +++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 @@ -14,9 +14,13 @@ import android.view.Menu;
@@ -3022,7 +3030,22 @@ index 53fb456..0fdf5eb 100644
                      });
                      magnifierView.setZoomValue(renderer.getMagnifierZoom());
                      magnifierView.setHideButtonCallback(() -> {
-@@ -497,7 +522,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -424,6 +449,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     }
+ 
+     private void exit() {
++        if (DependencyManager.isInstallRunning()) {
++            ContentDialog.confirm(this, R.string.deps_exit_while_installing, this::exitNow);
++            return;
++        }
++        exitNow();
++    }
++
++    private void exitNow() {
+         winHandler.stop();
+         if (environment != null) environment.stopEnvironmentComponents();
+ 
+@@ -497,7 +530,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
  
          boolean enableWineDebug = preferences.getBoolean("enable_wine_debug", false);
          String wineDebugChannels = preferences.getString("wine_debug_channels", SettingsFragment.DEFAULT_WINE_DEBUG_CHANNELS);
@@ -3031,7 +3054,7 @@ index 53fb456..0fdf5eb 100644
  
          FileUtils.clear(rootFS.getTmpDir());
  
-@@ -506,7 +531,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -506,7 +539,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          if (container != null) {
              if (container.getHUDMode() == FrameRating.Mode.FULL.ordinal()) envVars.put("X11_WND_GPU_INFO", "1");
  
@@ -3040,7 +3063,7 @@ index 53fb456..0fdf5eb 100644
              String guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
              guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
  
-@@ -552,7 +577,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -552,7 +585,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
  
          guestProgramLauncherComponent.setEnvVars(envVars);
@@ -3055,7 +3078,7 @@ index 53fb456..0fdf5eb 100644
          environment.addComponent(guestProgramLauncherComponent);
  
          if (isGenerateWineprefix()) {
-@@ -563,6 +594,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -563,6 +602,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
              envVars.putAll(overrideEnvVars);
              overrideEnvVars = null;
          }
@@ -3063,7 +3086,7 @@ index 53fb456..0fdf5eb 100644
          environment.startEnvironmentComponents();
  
          winHandler.start();
-@@ -583,6 +615,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -583,6 +623,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
          renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
          renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
@@ -3071,7 +3094,7 @@ index 53fb456..0fdf5eb 100644
  
          xServer.setRenderer(renderer);
          rootView.addView(xServerView);
-@@ -591,7 +624,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -591,7 +632,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          capturePointerOnExternalMouse = preferences.getBoolean("capture_pointer_on_external_mouse", true);
          touchpadView = new TouchpadView(this, xServer, capturePointerOnExternalMouse);
          touchpadView.setSensitivity(globalCursorSpeed);
@@ -3081,7 +3104,7 @@ index 53fb456..0fdf5eb 100644
          touchpadView.setFourFingersTapCallback(() -> {
              if (!drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.openDrawer(GravityCompat.START);
          });
-@@ -604,6 +638,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -604,6 +646,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          inputControlsView.setVisibility(View.GONE);
          rootView.addView(inputControlsView);
  
@@ -3091,7 +3114,7 @@ index 53fb456..0fdf5eb 100644
          if (container != null && container.getHUDMode() != FrameRating.Mode.DISABLED.ordinal()) {
              frameRating = new FrameRating(this);
              frameRating.setMode(FrameRating.Mode.values()[container.getHUDMode()]);
-@@ -623,6 +660,114 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -623,6 +668,114 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
      }
  
@@ -3206,7 +3229,7 @@ index 53fb456..0fdf5eb 100644
      private void showInputControlsDialog() {
          final ContentDialog dialog = new ContentDialog(this, R.layout.input_controls_dialog);
          dialog.setTitle(R.string.input_controls);
-@@ -1123,4 +1268,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -1123,4 +1276,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
          else return false;
      }
@@ -4105,10 +4128,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..3128702 100644
+index 61fcd5e..fc06ebb 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,70 @@
+@@ -1,6 +1,71 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -4160,6 +4183,7 @@ index 61fcd5e..3128702 100644
 +    <string name="deps_install_finished">Dependency install finished</string>
 +    <string name="deps_install_finished_hint">Open Dependencies on the home screen to see verified status. The install log is saved to Download/MiniEXE/install-log.txt.</string>
 +    <string name="deps_elapsed">%1$s: running for %2$d:%3$02d. The installer\'s own window shows its progress.</string>
++    <string name="deps_exit_while_installing">A dependency is still installing. Exiting now stops it part-way, and it will have to be installed again. Exit anyway?</string>
 +    <string name="deps_view_install_log">View last install log</string>
 +    <string name="deps_install_log">Install log (also saved to Download/MiniEXE/install-log.txt)</string>
 +    <string name="deps_copy">Copy</string>
@@ -4180,7 +4204,7 @@ index 61fcd5e..3128702 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +415,10 @@
+@@ -351,10 +416,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>

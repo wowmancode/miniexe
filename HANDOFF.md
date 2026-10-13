@@ -260,6 +260,16 @@ symlink was not the cause. Catalog downloads can now set `stageAs`; the
 user-launched installers with those names are still blocked; consider
 surfacing that (or removing the rule) after testing .NET under Box64.
 
+**Thirteenth report — rename confirmed.** `netfx40setup.exe` started and
+ran the full .NET 4.0 sequence (extracted `Setup.exe`, `msiexec`,
+`lodctr`/`unlodctr`, `regtlibv12`, `mofcomp`, `ngen` with 18 `mscorsvw`
+runs, then a second `msiexec` for the Extended package). The session was
+then SIGKILLed (`Guest process exited with code 137`, Exit button or
+Android) during the second `msiexec`, so the script never reached DONE and
+the Downloads `install-log.txt` was the previous run's. Exit now asks for
+confirmation while `DependencyManager.isInstallRunning()`. A complete,
+uninterrupted .NET 4.0 install and its verified status are still pending.
+
 **Windows version.** Wine uses HKCU\Software\Wine "Version" (winecfg)
 when present and only otherwise the HKLM NT CurrentVersion keys (what
 Winlator's container setting writes), and registry files edited while a
