@@ -226,6 +226,18 @@ started with `start` so an error dialog cannot block), and (C) `/x`
 self-extraction. Whether B starts (an `init_peb` line in `logs.txt`) shows
 whether the 50 MB overlay is what prevents process creation.
 
+Tenth report: with the probe build the .NET installer appeared to start
+and kept running (no completion yet), so a launch path now works; which
+attempt succeeded is not yet confirmed from logs. Installers now run in
+their own progress-UI modes (`/passive` for .NET 4.x and VC++ 2012–2022,
+`/qb` for VC++ 2008 and MSI packages), which is the only real percentage
+available since installers expose none externally. The install panel
+shows elapsed time per item and a Processes button; the session toolbar
+also has Processes. Both open Winlator's existing `TaskManagerDialog`
+(process list with memory and end-task, per-core CPU usage, memory,
+battery). The truncated-stub probe was removed; the fallback keeps the
+in-prefix copy and `/x` extraction.
+
 **Releases:** pushes to `main` now also publish the APK to GitHub Releases
 (`build-YYYYMMDD-HHMM-<sha>`, marked latest) via `gh release create` in
 the workflow (`permissions: contents: write`). The one-day artifact upload

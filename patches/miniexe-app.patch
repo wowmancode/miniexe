@@ -35,10 +35,10 @@ index 1262c0d..4bfbb75 100644
  
 diff --git a/app/src/main/assets/miniexe/dependencies.json b/app/src/main/assets/miniexe/dependencies.json
 new file mode 100644
-index 0000000..b6a318b
+index 0000000..cb86c2b
 --- /dev/null
 +++ b/app/src/main/assets/miniexe/dependencies.json
-@@ -0,0 +1,635 @@
+@@ -0,0 +1,626 @@
 +{
 + "categories": [
 +  {
@@ -82,7 +82,7 @@ index 0000000..b6a318b
 +    }
 +   ],
 +   "commands": [
-+    "msiexec.exe /i {cache}\\wine-mono-10.1.0-x86.msi /qn"
++    "msiexec.exe /i {cache}\\wine-mono-10.1.0-x86.msi /qb"
 +   ],
 +   "verify": {
 +    "files": [
@@ -150,12 +150,11 @@ index 0000000..b6a318b
 +    {
 +     "url": "https://download.microsoft.com/download/9/5/A/95A9616B-7A37-4AF6-BC36-D6EA96C8DAAE/dotNetFx40_Full_x86_x64.exe",
 +     "sha256": "65e064258f2e418816b304f646ff9e87af101e4c9552ab064bb74d281c38659f",
-+     "file": "dotNetFx40_Full_x86_x64.exe",
-+     "probe": true
++     "file": "dotNetFx40_Full_x86_x64.exe"
 +    }
 +   ],
 +   "commands": [
-+    "{cache}\\dotNetFx40_Full_x86_x64.exe /q /norestart",
++    "{cache}\\dotNetFx40_Full_x86_x64.exe /passive /norestart",
 +    "reg add \"HKLM\\Software\\Microsoft\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f",
 +    "reg add \"HKLM\\Software\\Wow6432Node\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f"
 +   ],
@@ -171,27 +170,24 @@ index 0000000..b6a318b
 +   },
 +   "debug": "+process",
 +   "fallbackCommands": [
-+    "echo   probe A: copy stored inside C: >> C:\\miniexe\\install-log.txt",
 +    "copy /Y {cache}\\dotNetFx40_Full_x86_x64.exe {tmp}\\setupcopy.exe",
-+    "{tmp}\\setupcopy.exe /q /norestart",
-+    "echo   probe B: first 512 KB only, no payload (expect it to start, then fail) >> C:\\miniexe\\install-log.txt",
-+    "start \"probe\" {cache}\\dotNetFx40_Full_x86_x64.exe.probe.exe /q",
-+    "echo   probe C: self-extract >> C:\\miniexe\\install-log.txt",
-+    "{cache}\\dotNetFx40_Full_x86_x64.exe /x:{tmp}\\x /q",
-+    "if exist {tmp}\\x\\Setup.exe ({tmp}\\x\\Setup.exe /q /norestart) else (cmd.exe /c exit 2)"
++    "{tmp}\\setupcopy.exe /passive /norestart",
++    "if errorlevel 1 ({cache}\\dotNetFx40_Full_x86_x64.exe /x:{tmp}\\x /q)",
++    "if exist {tmp}\\x\\Setup.exe ({tmp}\\x\\Setup.exe /passive /norestart) else (cmd.exe /c exit 0)"
 +   ],
 +   "diagEnv": [
 +    "BOX64_LOG=1",
 +    "BOX64_SHOWSEGV=1",
 +    "BOX64_DLSYM_ERROR=1"
-+   ]
++   ],
++   "note": "Shows the installer's own progress window. Under emulation this can take 15-30 minutes."
 +  },
 +  {
 +   "id": "dotnet45",
 +   "name": "Microsoft .NET Framework 4.5",
 +   "category": "runtime",
 +   "type": "installer",
-+   "note": "Replaces .NET 4.0 in this container (4.0 is installed first, then upgraded).",
++   "note": "Replaces .NET 4.0 in this container (4.0 is installed first, then upgraded). Shows the installer's own progress window. Under emulation this can take 15-30 minutes.",
 +   "requires": [
 +    "dotnet40"
 +   ],
@@ -213,12 +209,11 @@ index 0000000..b6a318b
 +    {
 +     "url": "https://download.microsoft.com/download/b/a/4/ba4a7e71-2906-4b2d-a0e1-80cf16844f5f/dotnetfx45_full_x86_x64.exe",
 +     "sha256": "a04d40e217b97326d46117d961ec4eda455e087b90637cb33dd6cc4a2c228d83",
-+     "file": "dotnetfx45_full_x86_x64.exe",
-+     "probe": true
++     "file": "dotnetfx45_full_x86_x64.exe"
 +    }
 +   ],
 +   "commands": [
-+    "{cache}\\dotnetfx45_full_x86_x64.exe /q /norestart",
++    "{cache}\\dotnetfx45_full_x86_x64.exe /passive /norestart",
 +    "reg add \"HKLM\\Software\\Microsoft\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f",
 +    "reg add \"HKLM\\Software\\Wow6432Node\\.NETFramework\" /v OnlyUseLatestCLR /t REG_DWORD /d 1 /f"
 +   ],
@@ -231,14 +226,10 @@ index 0000000..b6a318b
 +   },
 +   "debug": "+process",
 +   "fallbackCommands": [
-+    "echo   probe A: copy stored inside C: >> C:\\miniexe\\install-log.txt",
 +    "copy /Y {cache}\\dotnetfx45_full_x86_x64.exe {tmp}\\setupcopy.exe",
-+    "{tmp}\\setupcopy.exe /q /norestart",
-+    "echo   probe B: first 512 KB only, no payload (expect it to start, then fail) >> C:\\miniexe\\install-log.txt",
-+    "start \"probe\" {cache}\\dotnetfx45_full_x86_x64.exe.probe.exe /q",
-+    "echo   probe C: self-extract >> C:\\miniexe\\install-log.txt",
-+    "{cache}\\dotnetfx45_full_x86_x64.exe /x:{tmp}\\x /q",
-+    "if exist {tmp}\\x\\Setup.exe ({tmp}\\x\\Setup.exe /q /norestart) else (cmd.exe /c exit 2)"
++    "{tmp}\\setupcopy.exe /passive /norestart",
++    "if errorlevel 1 ({cache}\\dotnetfx45_full_x86_x64.exe /x:{tmp}\\x /q)",
++    "if exist {tmp}\\x\\Setup.exe ({tmp}\\x\\Setup.exe /passive /norestart) else (cmd.exe /c exit 0)"
 +   ],
 +   "diagEnv": [
 +    "BOX64_LOG=1",
@@ -285,8 +276,8 @@ index 0000000..b6a318b
 +    ]
 +   },
 +   "commands": [
-+    "{cache}\\vcredist_x86.exe /q /norestart",
-+    "{cache}\\vcredist_x64.exe /q /norestart"
++    "{cache}\\vcredist_x86.exe /qb",
++    "{cache}\\vcredist_x64.exe /qb"
 +   ],
 +   "verify": {
 +    "regText": "Visual C++ 2008 Redistributable"
@@ -330,8 +321,8 @@ index 0000000..b6a318b
 +    ]
 +   },
 +   "commands": [
-+    "{cache}\\vcredist_x86.exe /q /norestart",
-+    "{cache}\\vcredist_x64.exe /q /norestart"
++    "{cache}\\vcredist_x86.exe /passive /norestart",
++    "{cache}\\vcredist_x64.exe /passive /norestart"
 +   ],
 +   "verify": {
 +    "native": [
@@ -366,8 +357,8 @@ index 0000000..b6a318b
 +    ]
 +   },
 +   "commands": [
-+    "{cache}\\vcredist_x86.exe /q /norestart",
-+    "{cache}\\vcredist_x64.exe /q /norestart"
++    "{cache}\\vcredist_x86.exe /passive /norestart",
++    "{cache}\\vcredist_x64.exe /passive /norestart"
 +   ],
 +   "verify": {
 +    "native": [
@@ -410,8 +401,8 @@ index 0000000..b6a318b
 +    ]
 +   },
 +   "commands": [
-+    "{cache}\\vc_redist.x86.exe /install /quiet /norestart",
-+    "{cache}\\vc_redist.x64.exe /install /quiet /norestart"
++    "{cache}\\vc_redist.x86.exe /install /passive /norestart",
++    "{cache}\\vc_redist.x64.exe /install /passive /norestart"
 +   ],
 +   "verify": {
 +    "native": [
@@ -622,7 +613,7 @@ index 0000000..b6a318b
 +    }
 +   ],
 +   "commands": [
-+    "msiexec.exe /i {cache}\\msxml3.msi /qn"
++    "msiexec.exe /i {cache}\\msxml3.msi /qb"
 +   ],
 +   "verify": {
 +    "native": [
@@ -650,7 +641,7 @@ index 0000000..b6a318b
 +   ],
 +   "commands": [
 +    "extrac32.exe /Y /E /L {tmp} {cache}\\msxml6-KB2957482-enu-amd64.cab",
-+    "msiexec.exe /i {tmp}\\msxml6.msi /qn"
++    "msiexec.exe /i {tmp}\\msxml6.msi /qb"
 +   ],
 +   "verify": {
 +    "native": [
@@ -2782,7 +2773,7 @@ index ca3c83b..1c55ff9 100644
          }
      }
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-index 53fb456..f74449e 100644
+index 53fb456..0fdf5eb 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
 +++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 @@ -14,9 +14,13 @@ import android.view.Menu;
@@ -2956,12 +2947,12 @@ index 53fb456..f74449e 100644
          rootView.addView(inputControlsView);
  
 +        addQuickToolbar(rootView, renderer);
-+        com.winlator.widget.DependencyProgressOverlay.attach(rootView);
++        com.winlator.widget.DependencyProgressOverlay.attach(rootView, () -> (new TaskManagerDialog(this)).show());
 +
          if (container != null && container.getHUDMode() != FrameRating.Mode.DISABLED.ordinal()) {
              frameRating = new FrameRating(this);
              frameRating.setMode(FrameRating.Mode.values()[container.getHUDMode()]);
-@@ -623,6 +660,110 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -623,6 +660,114 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
      }
  
@@ -3058,6 +3049,10 @@ index 53fb456..f74449e 100644
 +            quickActionsScroll.setVisibility(View.GONE);
 +        }));
 +        quickActions.addView(toolbarButton(getString(R.string.keyboard), (v) -> AppUtils.showKeyboard(this)));
++        quickActions.addView(toolbarButton(getString(R.string.processes), (v) -> {
++            quickActionsScroll.setVisibility(View.GONE);
++            (new TaskManagerDialog(this)).show();
++        }));
 +        quickActions.addView(toolbarButton(getString(R.string.reset_zoom), (v) -> {
 +            renderer.resetMagnifier();
 +            preferences.edit().putFloat("miniexe_zoom", 1.0f).apply();
@@ -3072,7 +3067,7 @@ index 53fb456..f74449e 100644
      private void showInputControlsDialog() {
          final ContentDialog dialog = new ContentDialog(this, R.layout.input_controls_dialog);
          dialog.setTitle(R.string.input_controls);
-@@ -1123,4 +1264,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -1123,4 +1268,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
          else return false;
      }
@@ -3275,10 +3270,10 @@ index c3f422c..87c1f28 100644
      private final Context context;
 diff --git a/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java b/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java
 new file mode 100644
-index 0000000..7960ab2
+index 0000000..8eaa0e5
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,190 @@
 +package com.winlator.widget;
 +
 +import android.content.Context;
@@ -3310,7 +3305,12 @@ index 0000000..7960ab2
 +    private final ProgressBar overall;
 +    private final ProgressBar current;
 +    private String lastLine = "";
++    private long stepStartedAt;
++    private String stepName = "";
++    private boolean running;
++    private final TextView elapsed;
 +    private boolean dismissed;
++    private final Button processesButton;
 +
 +    private final Runnable poll = new Runnable() {
 +        @Override
@@ -3336,6 +3336,13 @@ index 0000000..7960ab2
 +        title.setTextColor(Color.WHITE);
 +        title.setTextSize(16);
 +        header.addView(title, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
++        processesButton = new Button(context);
++        processesButton.setText(R.string.processes);
++        processesButton.setAllCaps(false);
++        processesButton.setMinWidth(0);
++        processesButton.setMinimumWidth(0);
++        processesButton.setVisibility(GONE);
++        header.addView(processesButton);
 +        Button hide = new Button(context);
 +        hide.setText("×");
 +        hide.setMinWidth(0);
@@ -3358,10 +3365,18 @@ index 0000000..7960ab2
 +        current = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
 +        current.setIndeterminate(true);
 +        addView(current, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
++
++        elapsed = new TextView(context);
++        elapsed.setTextColor(0xFFCFD8E3);
++        addView(elapsed);
 +    }
 +
-+    public static DependencyProgressOverlay attach(FrameLayout root) {
++    public static DependencyProgressOverlay attach(FrameLayout root, Runnable openProcesses) {
 +        DependencyProgressOverlay overlay = new DependencyProgressOverlay(root.getContext());
++        if (openProcesses != null) {
++            overlay.processesButton.setVisibility(VISIBLE);
++            overlay.processesButton.setOnClickListener(v -> openProcesses.run());
++        }
 +        int margin = overlay.dp(8);
 +        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
 +        params.setMargins(margin, margin, margin, margin);
@@ -3386,6 +3401,10 @@ index 0000000..7960ab2
 +    }
 +
 +    private void update() {
++        if (running && stepStartedAt > 0) {
++            long seconds = (System.currentTimeMillis() - stepStartedAt) / 1000;
++            elapsed.setText(getContext().getString(R.string.deps_elapsed, stepName, seconds / 60, seconds % 60));
++        }
 +        File file = DependencyManager.getActiveProgressFile();
 +        if (file == null) {
 +            if (getVisibility() != GONE) setVisibility(GONE);
@@ -3409,6 +3428,12 @@ index 0000000..7960ab2
 +            overall.setProgress(index - 1);
 +            itemLabel.setText(name);
 +            current.setVisibility(VISIBLE);
++            if (!name.equals(stepName) || !running) {
++                stepName = name;
++                stepStartedAt = System.currentTimeMillis();
++            }
++            running = true;
++            elapsed.setVisibility(VISIBLE);
 +        }
 +        else if (parts.length >= 2 && parts[0].equals("DONE")) {
 +            int count = Math.max(1, parseInt(parts[1]));
@@ -3417,6 +3442,8 @@ index 0000000..7960ab2
 +            overall.setProgress(count);
 +            itemLabel.setText(R.string.deps_install_finished_hint);
 +            current.setVisibility(GONE);
++            running = false;
++            elapsed.setVisibility(GONE);
 +            new Thread(() -> DependencyManager.exportActiveInstallLog(getContext().getApplicationContext())).start();
 +            final File finished = file;
 +            postDelayed(() -> {
@@ -3939,10 +3966,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..3f54484 100644
+index 61fcd5e..62a80d4 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,66 @@
+@@ -1,6 +1,67 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -3989,10 +4016,11 @@ index 61fcd5e..3f54484 100644
 +    <string name="deps_no_cabinet">%1$s does not contain the expected cabinet archive.</string>
 +    <string name="skip">Skip</string>
 +    <string name="done">Done</string>
-+    <string name="deps_installing_count">Installing dependency %1$d of %2$d</string>
++    <string name="deps_installing_count">Installing %1$d of %2$d</string>
 +    <string name="deps_install_starting">Starting dependency install…</string>
 +    <string name="deps_install_finished">Dependency install finished</string>
 +    <string name="deps_install_finished_hint">Open Dependencies on the home screen to see verified status. The install log is saved to Download/MiniEXE/install-log.txt.</string>
++    <string name="deps_elapsed">%1$s: running for %2$d:%3$02d. The installer\'s own window shows its progress.</string>
 +    <string name="deps_view_install_log">View last install log</string>
 +    <string name="deps_install_log">Install log (also saved to Download/MiniEXE/install-log.txt)</string>
 +    <string name="deps_copy">Copy</string>
@@ -4010,7 +4038,7 @@ index 61fcd5e..3f54484 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +411,10 @@
+@@ -351,10 +412,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
