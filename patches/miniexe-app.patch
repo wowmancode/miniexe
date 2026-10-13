@@ -93,11 +93,565 @@ index 2314314..7e37b9c 100644
 -#endif
 \ No newline at end of file
 +#endif
+diff --git a/app/src/main/java/com/winlator/ContainerFileManagerFragment.java b/app/src/main/java/com/winlator/ContainerFileManagerFragment.java
+index 872621b..cd6a91a 100644
+--- a/app/src/main/java/com/winlator/ContainerFileManagerFragment.java
++++ b/app/src/main/java/com/winlator/ContainerFileManagerFragment.java
+@@ -377,10 +377,7 @@ public class ContainerFileManagerFragment extends BaseFileManagerFragment<FileIn
+             boolean isFile = linkInfo != null ? !linkInfo.isDirectory : file.type == FileInfo.Type.FILE;
+ 
+             if (isFile) {
+-                Intent intent = new Intent(activity, XServerDisplayActivity.class);
+-                intent.putExtra("container_id", container.id);
+-                intent.putExtra("exec_path", file.path);
+-                activity.startActivity(intent);
++                ((MainActivity)activity).launchProgram(container.id, file.path, false);
+             }
+             else {
+                 folderStack.push(file);
+diff --git a/app/src/main/java/com/winlator/ContainersFragment.java b/app/src/main/java/com/winlator/ContainersFragment.java
+index aab4c0a..f816182 100644
+--- a/app/src/main/java/com/winlator/ContainersFragment.java
++++ b/app/src/main/java/com/winlator/ContainersFragment.java
+@@ -181,6 +181,7 @@ public class ContainersFragment extends Fragment {
+ 
+         private void runContainer(Container container) {
+             Activity activity = getActivity();
++            if (XServerDisplayActivity.tryOpenContainer(activity, container.id)) return;
+             Intent intent = new Intent(activity, XServerDisplayActivity.class);
+             intent.putExtra("container_id", container.id);
+             activity.startActivity(intent);
+diff --git a/app/src/main/java/com/winlator/InstalledProgramsFragment.java b/app/src/main/java/com/winlator/InstalledProgramsFragment.java
+new file mode 100644
+index 0000000..6db1839
+--- /dev/null
++++ b/app/src/main/java/com/winlator/InstalledProgramsFragment.java
+@@ -0,0 +1,80 @@
++package com.winlator;
++
++import android.os.Bundle;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.Button;
++import android.widget.LinearLayout;
++import android.widget.ScrollView;
++import android.widget.TextView;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.fragment.app.Fragment;
++
++import com.winlator.container.Container;
++import com.winlator.container.ContainerManager;
++import com.winlator.container.Shortcut;
++
++import java.io.File;
++
++public class InstalledProgramsFragment extends Fragment {
++    private LinearLayout list;
++
++    @Nullable
++    @Override
++    public View onCreateView(@NonNull android.view.LayoutInflater inflater, @Nullable ViewGroup parent, @Nullable Bundle state) {
++        ScrollView scroll = new ScrollView(requireContext());
++        list = new LinearLayout(requireContext());
++        list.setOrientation(LinearLayout.VERTICAL);
++        int padding = (int)(16 * getResources().getDisplayMetrics().density);
++        list.setPadding(padding, padding, padding, padding);
++        scroll.addView(list);
++        return scroll;
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        requireActivity().setTitle(R.string.installed_programs);
++        list.removeAllViews();
++        MainActivity activity = (MainActivity)requireActivity();
++        ContainerManager manager = new ContainerManager(requireContext());
++        int count = 0;
++        for (Shortcut shortcut : manager.loadShortcuts(null)) {
++            if (!shortcut.file.isDirectory()) {
++                addButton(shortcut.name, () -> activity.launchProgram(shortcut.container.id, shortcut.file.getPath(), true));
++                count++;
++            }
++        }
++        for (Container container : manager.getContainers()) count += addLinks(activity, container, container.getStartMenuDir());
++        if (count == 0) {
++            TextView empty = new TextView(requireContext());
++            empty.setText(R.string.no_items_to_display);
++            list.addView(empty);
++        }
++    }
++
++    private int addLinks(MainActivity activity, Container container, File directory) {
++        File[] files = directory.listFiles();
++        if (files == null) return 0;
++        int count = 0;
++        for (File file : files) {
++            if (file.isDirectory()) count += addLinks(activity, container, file);
++            else if (file.getName().toLowerCase().endsWith(".lnk")) {
++                String name = file.getName().substring(0, file.getName().length() - 4);
++                addButton(name, () -> activity.launchProgram(container.id, file.getPath(), false));
++                count++;
++            }
++        }
++        return count;
++    }
++
++    private void addButton(String name, Runnable action) {
++        Button button = new Button(requireContext());
++        button.setAllCaps(false);
++        button.setText(name);
++        button.setOnClickListener(v -> action.run());
++        list.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++    }
++}
+diff --git a/app/src/main/java/com/winlator/MainActivity.java b/app/src/main/java/com/winlator/MainActivity.java
+index dd126b1..ba9d700 100644
+--- a/app/src/main/java/com/winlator/MainActivity.java
++++ b/app/src/main/java/com/winlator/MainActivity.java
+@@ -31,6 +31,11 @@ import com.winlator.core.Callback;
+ import com.winlator.core.LocaleHelper;
+ import com.winlator.core.PreloaderDialog;
+ import com.winlator.xenvironment.RootFSInstaller;
++import com.winlator.container.Container;
++import com.winlator.container.ContainerManager;
++import com.winlator.xenvironment.RootFS;
++import org.json.JSONArray;
++import org.json.JSONObject;
+ 
+ public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+     public static final boolean DEBUG_MODE = false; // FIXME change to false
+@@ -46,6 +51,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+     private Callback<Uri> openFileCallback;
+     private SharedPreferences preferences;
+     private Fragment currentFragment;
++    private NavigationView navigationView;
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -54,7 +60,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+         setContentView(R.layout.main_activity);
+ 
+         drawerLayout = findViewById(R.id.DrawerLayout);
+-        NavigationView navigationView = findViewById(R.id.NavigationView);
++        navigationView = findViewById(R.id.NavigationView);
+         navigationView.setNavigationItemSelectedListener(this);
+ 
+         setSupportActionBar(findViewById(R.id.Toolbar));
+@@ -62,6 +68,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+         actionBar.setDisplayHomeAsUpEnabled(true);
+ 
+         preferences = PreferenceManager.getDefaultSharedPreferences(this);
++        updateNavigationMode();
+ 
+         Intent intent = getIntent();
+         editInputControls = intent.getBooleanExtra("edit_input_controls", false);
+@@ -72,9 +79,8 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+             navigationView.setCheckedItem(R.id.menu_item_input_controls);
+         }
+         else {
+-            boolean showShortcutsFirst = preferences.getBoolean("show_shortcuts_first", false);
+             int selectedMenuItemId = intent.getIntExtra("selected_menu_item_id", 0);
+-            int menuItemId = selectedMenuItemId > 0 ? selectedMenuItemId : (showShortcutsFirst ? R.id.menu_item_shortcuts : R.id.menu_item_containers);
++            int menuItemId = selectedMenuItemId > 0 ? selectedMenuItemId : R.id.menu_item_home_screen;
+ 
+             actionBar.setHomeAsUpIndicator(R.drawable.icon_action_bar_menu);
+             onNavigationItemSelected(navigationView.getMenu().findItem(menuItemId));
+@@ -132,12 +138,71 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+                 BaseFileManagerFragment fileManagerFragment = (BaseFileManagerFragment)currentFragment;
+                 if (fileManagerFragment.onBackPressed()) return;
+             }
+-            else if (currentFragment instanceof ContainersFragment) {
++            else if (currentFragment instanceof MiniHomeFragment) {
+                 finish();
++                return;
+             }
+         }
+ 
+-        showFragment(new ContainersFragment());
++        showFragment(new MiniHomeFragment());
++    }
++
++    public void updateNavigationMode() {
++        boolean advanced = preferences.getBoolean("miniexe_advanced", false);
++        navigationView.getMenu().findItem(R.id.menu_item_containers).setVisible(advanced);
++        navigationView.getMenu().findItem(R.id.menu_item_input_controls).setVisible(advanced);
++    }
++
++    public void openDefaultFiles() {
++        ContainerManager manager = new ContainerManager(this);
++        if (!manager.getContainers().isEmpty()) {
++            showFragment(new ContainerFileManagerFragment(manager.getContainers().get(0).id));
++            return;
++        }
++        if (!RootFS.find(this).isValid()) {
++            AppUtils.showToast(this, R.string.starting_up);
++            return;
++        }
++        preloaderDialog.show(R.string.creating_container);
++        JSONObject data = new JSONObject();
++        try { data.put("name", "Default"); }
++        catch (Exception ignored) {}
++        manager.createContainerAsync(data, container -> {
++            preloaderDialog.close();
++            if (container != null) showFragment(new ContainerFileManagerFragment(container.id));
++            else AppUtils.showToast(this, R.string.unable_to_install_system_files);
++        });
++    }
++
++    public void launchProgram(int containerId, String path, boolean shortcut) {
++        if (!new java.io.File(path).isFile()) return;
++        recordRecent(this, containerId, path, shortcut);
++        if (XServerDisplayActivity.tryLaunchInSession(this, containerId, path, shortcut)) return;
++        Intent intent = new Intent(this, XServerDisplayActivity.class);
++        intent.putExtra("container_id", containerId);
++        intent.putExtra(shortcut ? "shortcut_path" : "exec_path", path);
++        startActivity(intent);
++    }
++
++    public static void recordRecent(Context context, int containerId, String path, boolean shortcut) {
++        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++        JSONArray old;
++        try { old = new JSONArray(prefs.getString("miniexe_recent", "[]")); }
++        catch (Exception e) { old = new JSONArray(); }
++        JSONArray recent = new JSONArray();
++        try {
++            JSONObject item = new JSONObject();
++            item.put("container_id", containerId);
++            item.put("path", path);
++            item.put("shortcut", shortcut);
++            recent.put(item);
++            for (int i = 0; i < old.length() && recent.length() < 10; i++) {
++                JSONObject other = old.optJSONObject(i);
++                if (other != null && !path.equals(other.optString("path"))) recent.put(other);
++            }
++            prefs.edit().putString("miniexe_recent", recent.toString()).apply();
++        }
++        catch (Exception ignored) {}
+     }
+ 
+     public void setOpenFileCallback(Callback<Uri> openFileCallback) {
+@@ -186,6 +251,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+         }
+ 
+         switch (item.getItemId()) {
++            case R.id.menu_item_home_screen:
++                showFragment(new MiniHomeFragment());
++                break;
+             case R.id.menu_item_shortcuts:
+                 preferences.edit().putBoolean("show_shortcuts_first", true).apply();
+                 showFragment(new ShortcutsFragment());
+@@ -198,7 +266,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+                 showFragment(new InputControlsFragment(selectedProfileId));
+                 break;
+             case R.id.menu_item_settings:
+-                showFragment(new SettingsFragment());
++                showFragment(new MiniSettingsFragment());
+                 break;
+             case R.id.menu_item_about:
+                 (new AboutDialog(this)).show();
+@@ -216,4 +284,4 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+         drawerLayout.closeDrawer(GravityCompat.START);
+         currentFragment = fragment;
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/com/winlator/MiniHomeFragment.java b/app/src/main/java/com/winlator/MiniHomeFragment.java
+new file mode 100644
+index 0000000..e5d7a2f
+--- /dev/null
++++ b/app/src/main/java/com/winlator/MiniHomeFragment.java
+@@ -0,0 +1,163 @@
++package com.winlator;
++
++import android.os.Bundle;
++import android.view.Gravity;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.Button;
++import android.widget.LinearLayout;
++import android.widget.ScrollView;
++import android.widget.TextView;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.fragment.app.Fragment;
++import androidx.preference.PreferenceManager;
++
++import com.winlator.container.Container;
++import com.winlator.container.ContainerManager;
++import com.winlator.container.Shortcut;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.io.File;
++import java.util.ArrayList;
++
++public class MiniHomeFragment extends Fragment {
++    private LinearLayout content;
++
++    @Nullable
++    @Override
++    public View onCreateView(@NonNull android.view.LayoutInflater inflater, @Nullable ViewGroup parent, @Nullable Bundle state) {
++        ScrollView scroll = new ScrollView(requireContext());
++        content = new LinearLayout(requireContext());
++        content.setOrientation(LinearLayout.VERTICAL);
++        int padding = (int)(16 * getResources().getDisplayMetrics().density);
++        content.setPadding(padding, padding, padding, padding);
++        scroll.addView(content);
++        return scroll;
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        requireActivity().setTitle(R.string.app_name);
++        populate();
++    }
++
++    private void heading(int stringId) {
++        TextView label = new TextView(requireContext());
++        label.setText(stringId);
++        label.setTextSize(20);
++        label.setPadding(0, 18, 0, 6);
++        content.addView(label);
++    }
++
++    private Button button(String label, Runnable action) {
++        Button button = new Button(requireContext());
++        button.setAllCaps(false);
++        button.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
++        button.setText(label);
++        button.setOnClickListener(v -> action.run());
++        content.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++        return button;
++    }
++
++    private void populate() {
++        if (content == null) return;
++        content.removeAllViews();
++        MainActivity activity = (MainActivity)requireActivity();
++        String lastExit = PreferenceManager.getDefaultSharedPreferences(requireContext()).getString("miniexe_last_exit", "");
++        if (!lastExit.isEmpty()) {
++            heading(R.string.last_launch);
++            TextView message = new TextView(requireContext());
++            message.setText(lastExit + "\n" + getString(R.string.log_saved_to));
++            content.addView(message);
++        }
++        button(getString(R.string.run_exe), activity::openDefaultFiles);
++        button(getString(R.string.installed_programs), () -> activity.showFragment(new InstalledProgramsFragment()));
++        button(getString(R.string.file_explorer), activity::openDefaultFiles);
++        button(getString(R.string.running_apps), () -> XServerDisplayActivity.showRunningSession(activity));
++        button(getString(R.string.settings), () -> activity.showFragment(new MiniSettingsFragment()));
++
++        heading(R.string.pinned_programs);
++        JSONArray pinned = readList("miniexe_pinned");
++        for (int i = 0; i < pinned.length(); i++) {
++            JSONObject item = pinned.optJSONObject(i);
++            if (item == null) continue;
++            int containerId = item.optInt("container_id");
++            String path = item.optString("path");
++            boolean shortcut = item.optBoolean("shortcut");
++            if (!new File(path).isFile()) continue;
++            button(new File(path).getName(), () -> activity.launchProgram(containerId, path, shortcut))
++                    .setOnLongClickListener(v -> { changePin(item, false); return true; });
++        }
++
++        heading(R.string.recent_applications);
++        TextView hint = new TextView(requireContext());
++        hint.setText(R.string.pin_recent_hint);
++        content.addView(hint);
++        JSONArray recent = readList("miniexe_recent");
++        for (int i = 0; i < recent.length(); i++) {
++            JSONObject item = recent.optJSONObject(i);
++            if (item == null) continue;
++            int containerId = item.optInt("container_id");
++            String path = item.optString("path");
++            boolean shortcut = item.optBoolean("shortcut");
++            if (!new File(path).isFile()) continue;
++            button(new File(path).getName(), () -> activity.launchProgram(containerId, path, shortcut))
++                    .setOnLongClickListener(v -> { changePin(item, true); return true; });
++        }
++
++        heading(R.string.installed_programs);
++        ContainerManager manager = new ContainerManager(requireContext());
++        ArrayList<Shortcut> shortcuts = manager.loadShortcuts(null);
++        int displayed = 0;
++        for (Shortcut shortcut : shortcuts) {
++            if (shortcut.file.isDirectory()) continue;
++            button(shortcut.name, () -> activity.launchProgram(shortcut.container.id, shortcut.file.getPath(), true));
++            if (++displayed >= 12) break;
++        }
++        for (Container container : manager.getContainers()) {
++            displayed = addStartMenuLinks(activity, container, container.getStartMenuDir(), displayed);
++            if (displayed >= 20) break;
++        }
++        if (displayed == 0) {
++            TextView empty = new TextView(requireContext());
++            empty.setText(R.string.no_items_to_display);
++            content.addView(empty);
++        }
++    }
++
++    private JSONArray readList(String key) {
++        try { return new JSONArray(PreferenceManager.getDefaultSharedPreferences(requireContext()).getString(key, "[]")); }
++        catch (Exception e) { return new JSONArray(); }
++    }
++
++    private void changePin(JSONObject selected, boolean add) {
++        JSONArray current = readList("miniexe_pinned");
++        JSONArray next = new JSONArray();
++        if (add) next.put(selected);
++        for (int i = 0; i < current.length(); i++) {
++            JSONObject item = current.optJSONObject(i);
++            if (item != null && !item.optString("path").equals(selected.optString("path"))) next.put(item);
++        }
++        PreferenceManager.getDefaultSharedPreferences(requireContext()).edit().putString("miniexe_pinned", next.toString()).apply();
++        populate();
++    }
++
++    private int addStartMenuLinks(MainActivity activity, Container container, File directory, int count) {
++        File[] files = directory.listFiles();
++        if (files == null) return count;
++        for (File file : files) {
++            if (count >= 20) break;
++            if (file.isDirectory()) count = addStartMenuLinks(activity, container, file, count);
++            else if (file.getName().toLowerCase().endsWith(".lnk")) {
++                button(file.getName().substring(0, file.getName().length() - 4), () -> activity.launchProgram(container.id, file.getPath(), false));
++                count++;
++            }
++        }
++        return count;
++    }
++}
+diff --git a/app/src/main/java/com/winlator/MiniSettingsFragment.java b/app/src/main/java/com/winlator/MiniSettingsFragment.java
+new file mode 100644
+index 0000000..f961c31
+--- /dev/null
++++ b/app/src/main/java/com/winlator/MiniSettingsFragment.java
+@@ -0,0 +1,78 @@
++package com.winlator;
++
++import android.os.Bundle;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.Button;
++import android.widget.CheckBox;
++import android.widget.LinearLayout;
++import android.widget.RadioButton;
++import android.widget.RadioGroup;
++import android.widget.ScrollView;
++import android.widget.TextView;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.fragment.app.Fragment;
++import androidx.preference.PreferenceManager;
++
++import com.winlator.core.AppUtils;
++
++public class MiniSettingsFragment extends Fragment {
++    @Nullable
++    @Override
++    public View onCreateView(@NonNull android.view.LayoutInflater inflater, @Nullable ViewGroup parent, @Nullable Bundle state) {
++        ScrollView scroll = new ScrollView(requireContext());
++        LinearLayout content = new LinearLayout(requireContext());
++        content.setOrientation(LinearLayout.VERTICAL);
++        int padding = (int)(16 * getResources().getDisplayMetrics().density);
++        content.setPadding(padding, padding, padding, padding);
++        scroll.addView(content);
++
++        TextView title = new TextView(requireContext());
++        title.setText(R.string.settings);
++        title.setTextSize(22);
++        content.addView(title);
++
++        RadioGroup themes = new RadioGroup(requireContext());
++        RadioButton dark = new RadioButton(requireContext());
++        dark.setText(R.string.dark);
++        dark.setId(View.generateViewId());
++        themes.addView(dark);
++        RadioButton light = new RadioButton(requireContext());
++        light.setText(R.string.light);
++        light.setId(View.generateViewId());
++        themes.addView(light);
++        int theme = PreferenceManager.getDefaultSharedPreferences(requireContext()).getInt("app_theme", SettingsFragment.APP_THEME_DARK);
++        themes.check(theme == SettingsFragment.APP_THEME_LIGHT ? light.getId() : dark.getId());
++        themes.setOnCheckedChangeListener((group, checkedId) -> {
++            int selected = checkedId == light.getId() ? SettingsFragment.APP_THEME_LIGHT : SettingsFragment.APP_THEME_DARK;
++            PreferenceManager.getDefaultSharedPreferences(requireContext()).edit().putInt("app_theme", selected).apply();
++            AppUtils.restartActivity(requireActivity());
++        });
++        content.addView(themes);
++
++        CheckBox advanced = new CheckBox(requireContext());
++        advanced.setText(R.string.advanced_mode);
++        advanced.setChecked(PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("miniexe_advanced", false));
++        advanced.setOnCheckedChangeListener((button, checked) -> {
++            PreferenceManager.getDefaultSharedPreferences(requireContext()).edit().putBoolean("miniexe_advanced", checked).apply();
++            ((MainActivity)requireActivity()).updateNavigationMode();
++        });
++        content.addView(advanced);
++
++        Button advancedSettings = new Button(requireContext());
++        advancedSettings.setAllCaps(false);
++        advancedSettings.setText(R.string.advanced_settings);
++        advancedSettings.setOnClickListener(v -> {
++            advanced.setChecked(true);
++            ((MainActivity)requireActivity()).showFragment(new SettingsFragment());
++        });
++        content.addView(advancedSettings, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++
++        TextView logs = new TextView(requireContext());
++        logs.setText(R.string.log_saved_to);
++        content.addView(logs);
++        return scroll;
++    }
++}
+diff --git a/app/src/main/java/com/winlator/SettingsFragment.java b/app/src/main/java/com/winlator/SettingsFragment.java
+index 3bb2d01..7e24b3f 100644
+--- a/app/src/main/java/com/winlator/SettingsFragment.java
++++ b/app/src/main/java/com/winlator/SettingsFragment.java
+@@ -184,11 +184,12 @@ public class SettingsFragment extends Fragment {
+         sBox64Logs.setSelection(preferences.getInt("box64_logs", 0));
+ 
+         final CheckBox cbSaveLogsToFile = view.findViewById(R.id.CBSaveLogsToFile);
+-        cbSaveLogsToFile.setChecked(preferences.getBoolean("save_logs_to_file", false));
++        cbSaveLogsToFile.setChecked(preferences.getBoolean("save_logs_to_file", true));
+ 
+         final EditText etLogFile = view.findViewById(R.id.ETLogFile);
+         final String defaultLogPath = LogView.getLogFile().getPath();
+-        etLogFile.setText(preferences.getString("log_file", defaultLogPath));
++        etLogFile.setText(defaultLogPath);
++        etLogFile.setEnabled(false);
+         etLogFile.setVisibility(cbSaveLogsToFile.isChecked() ? View.VISIBLE : View.GONE);
+         cbSaveLogsToFile.setOnCheckedChangeListener((buttonView, isChecked) -> etLogFile.setVisibility(isChecked ? View.VISIBLE : View.GONE));
+ 
+diff --git a/app/src/main/java/com/winlator/ShortcutsFragment.java b/app/src/main/java/com/winlator/ShortcutsFragment.java
+index ca3c83b..1c55ff9 100644
+--- a/app/src/main/java/com/winlator/ShortcutsFragment.java
++++ b/app/src/main/java/com/winlator/ShortcutsFragment.java
+@@ -225,10 +225,7 @@ public class ShortcutsFragment extends BaseFileManagerFragment<Shortcut> {
+                 actionBar.setTitle(shortcut.name);
+             }
+             else {
+-                Intent intent = new Intent(activity, XServerDisplayActivity.class);
+-                intent.putExtra("container_id", shortcut.container.id);
+-                intent.putExtra("shortcut_path", shortcut.file.getPath());
+-                activity.startActivity(intent);
++                ((MainActivity)activity).launchProgram(shortcut.container.id, shortcut.file.getPath(), true);
+             }
+         }
+     }
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-index 53fb456..338fcc2 100644
+index 53fb456..5ddd5c9 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
 +++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-@@ -14,9 +14,12 @@ import android.view.Menu;
+@@ -14,9 +14,13 @@ import android.view.Menu;
  import android.view.MenuItem;
  import android.view.MotionEvent;
  import android.view.View;
@@ -106,19 +660,62 @@ index 53fb456..338fcc2 100644
 +import android.widget.Button;
  import android.widget.CheckBox;
  import android.widget.FrameLayout;
++import android.widget.HorizontalScrollView;
 +import android.widget.LinearLayout;
  import android.widget.Spinner;
  
  import androidx.annotation.NonNull;
-@@ -136,6 +139,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -98,11 +102,13 @@ import org.json.JSONException;
+ import org.json.JSONObject;
+ 
+ import java.io.File;
++import java.lang.ref.WeakReference;
+ import java.util.ArrayList;
+ import java.util.Iterator;
+ import java.util.concurrent.Executors;
+ 
+ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
++    private static WeakReference<XServerDisplayActivity> activeSession = new WeakReference<>(null);
+     private XServerView xServerView;
+     private InputControlsView inputControlsView;
+     private TouchpadView touchpadView;
+@@ -136,11 +142,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
      public int frameRatingWindowId = -1;
      private Win32AppWorkarounds win32AppWorkarounds;
      private String screenEffectProfile;
 +    private LinearLayout quickActions;
++    private HorizontalScrollView quickActionsScroll;
++    private long sessionStartTime;
  
      @Override
      public void onCreate(Bundle savedInstanceState) {
-@@ -235,7 +239,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         AppUtils.setActivityTheme(this);
+         super.onCreate(savedInstanceState);
++        activeSession = new WeakReference<>(this);
+         AppUtils.hideSystemUI(this);
+         AppUtils.keepScreenOn(this);
+         setContentView(R.layout.xserver_display_activity);
+@@ -148,6 +158,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+ 
+         final PreloaderDialog preloaderDialog = new PreloaderDialog(this);
+         preferences = PreferenceManager.getDefaultSharedPreferences(this);
++        preferences.edit().remove("miniexe_last_exit").apply();
+         boolean useAndroidClipboardOnWine = preferences.getBoolean("use_android_clipboard_on_wine", false);
+         clipboardManager = useAndroidClipboardOnWine ? (ClipboardManager)getSystemService(CLIPBOARD_SERVICE) : null;
+ 
+@@ -157,8 +168,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+ 
+         NavigationView navigationView = findViewById(R.id.NavigationView);
+         ProcessHelper.removeAllDebugCallbacks();
+-        boolean enableLogs = preferences.getBoolean("enable_wine_debug", false) || preferences.getInt("box64_logs", 0) >= 1;
+-        if (enableLogs) ProcessHelper.addDebugCallback(debugDialog = new DebugDialog(this));
++        boolean enableLogs = true;
++        ProcessHelper.addDebugCallback(debugDialog = new DebugDialog(this));
++        debugDialog.call("MiniEXE launch: " + getIntent().getStringExtra("exec_path"));
+         Menu menu = navigationView.getMenu();
+         menu.findItem(R.id.menu_item_logs).setVisible(enableLogs);
+         navigationView.setNavigationItemSelectedListener(this);
+@@ -235,7 +247,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          inputControlsManager = new InputControlsManager(this);
          xServer = new XServer(this, screenInfo);
          xServer.setWinHandler(winHandler);
@@ -127,12 +724,20 @@ index 53fb456..338fcc2 100644
          xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
              @Override
              public void onUpdateWindowContent(Window window) {
-@@ -367,6 +371,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -337,6 +349,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+ 
+     @Override
+     protected void onDestroy() {
++        if (activeSession.get() == this) activeSession.clear();
+         winHandler.stop();
+         if (environment != null) environment.stopEnvironmentComponents();
+         ForegroundService.stopSession(this);
+@@ -367,6 +380,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                  break;
              case R.id.menu_item_toggle_fullscreen:
                  renderer.toggleFullscreen();
 +                touchpadView.postDelayed(touchpadView::refreshTransform, 50);
-+                quickActions.setVisibility(View.GONE);
++                quickActionsScroll.setVisibility(View.GONE);
 +                drawerLayout.closeDrawers();
 +                break;
 +            case R.id.menu_item_run_exe:
@@ -144,7 +749,7 @@ index 53fb456..338fcc2 100644
                  drawerLayout.closeDrawers();
                  break;
              case R.id.menu_item_task_manager:
-@@ -384,6 +398,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -384,6 +407,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                      magnifierView.setZoomButtonCallback((value) -> {
                          renderer.setMagnifierZoom(Mathf.clamp(renderer.getMagnifierZoom() + value, 1.0f, 3.0f));
                          magnifierView.setZoomValue(renderer.getMagnifierZoom());
@@ -152,7 +757,16 @@ index 53fb456..338fcc2 100644
                      });
                      magnifierView.setZoomValue(renderer.getMagnifierZoom());
                      magnifierView.setHideButtonCallback(() -> {
-@@ -506,7 +521,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -497,7 +521,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+ 
+         boolean enableWineDebug = preferences.getBoolean("enable_wine_debug", false);
+         String wineDebugChannels = preferences.getString("wine_debug_channels", SettingsFragment.DEFAULT_WINE_DEBUG_CHANNELS);
+-        envVars.put("WINEDEBUG", enableWineDebug && !wineDebugChannels.isEmpty() ? "+"+wineDebugChannels.replace(",", ",+") : "-all");
++        envVars.put("WINEDEBUG", enableWineDebug && !wineDebugChannels.isEmpty() ? "+"+wineDebugChannels.replace(",", ",+") : "+err,+warn");
+ 
+         FileUtils.clear(rootFS.getTmpDir());
+ 
+@@ -506,7 +530,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          if (container != null) {
              if (container.getHUDMode() == FrameRating.Mode.FULL.ordinal()) envVars.put("X11_WND_GPU_INFO", "1");
  
@@ -161,7 +775,30 @@ index 53fb456..338fcc2 100644
              String guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
              guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
  
-@@ -583,6 +598,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -552,7 +576,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         }
+ 
+         guestProgramLauncherComponent.setEnvVars(envVars);
+-        guestProgramLauncherComponent.setTerminationCallback((status) -> exit());
++        guestProgramLauncherComponent.setTerminationCallback((status) -> {
++            debugDialog.call("Guest process exited with code " + status);
++            if (System.currentTimeMillis() - sessionStartTime < 20000 || status != 0) {
++                preferences.edit().putString("miniexe_last_exit", getString(R.string.program_ended_early, status)).apply();
++            }
++            runOnUiThread(() -> xServerView.postDelayed(this::exit, 500));
++        });
+         environment.addComponent(guestProgramLauncherComponent);
+ 
+         if (isGenerateWineprefix()) {
+@@ -563,6 +593,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+             envVars.putAll(overrideEnvVars);
+             overrideEnvVars = null;
+         }
++        sessionStartTime = System.currentTimeMillis();
+         environment.startEnvironmentComponents();
+ 
+         winHandler.start();
+@@ -583,6 +614,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
          renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
          renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
@@ -169,7 +806,7 @@ index 53fb456..338fcc2 100644
  
          xServer.setRenderer(renderer);
          rootView.addView(xServerView);
-@@ -591,7 +607,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -591,7 +623,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          capturePointerOnExternalMouse = preferences.getBoolean("capture_pointer_on_external_mouse", true);
          touchpadView = new TouchpadView(this, xServer, capturePointerOnExternalMouse);
          touchpadView.setSensitivity(globalCursorSpeed);
@@ -179,7 +816,7 @@ index 53fb456..338fcc2 100644
          touchpadView.setFourFingersTapCallback(() -> {
              if (!drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.openDrawer(GravityCompat.START);
          });
-@@ -604,6 +621,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -604,6 +637,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          inputControlsView.setVisibility(View.GONE);
          rootView.addView(inputControlsView);
  
@@ -188,7 +825,7 @@ index 53fb456..338fcc2 100644
          if (container != null && container.getHUDMode() != FrameRating.Mode.DISABLED.ordinal()) {
              frameRating = new FrameRating(this);
              frameRating.setMode(FrameRating.Mode.values()[container.getHUDMode()]);
-@@ -623,6 +642,52 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -623,6 +658,104 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
      }
  
@@ -197,6 +834,51 @@ index 53fb456..338fcc2 100644
 +            String command = path.trim();
 +            if (!command.isEmpty()) winHandler.exec(command, null);
 +        });
++    }
++
++    public static void showRunningSession(Activity activity) {
++        XServerDisplayActivity session = activeSession.get();
++        if (session == null || session.isFinishing()) {
++            AppUtils.showToast(activity, R.string.no_items_to_display);
++            return;
++        }
++        Intent intent = new Intent(activity, XServerDisplayActivity.class);
++        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
++        activity.startActivity(intent);
++        session.getWindow().getDecorView().postDelayed(() -> (new ActiveWindowsDialog(session)).show(), 150);
++    }
++
++    public static boolean tryOpenContainer(Activity activity, int containerId) {
++        XServerDisplayActivity session = activeSession.get();
++        if (session == null || session.isFinishing() || session.container == null) return false;
++        if (session.container.id != containerId) AppUtils.showToast(activity, R.string.close_current_session);
++        showRunningSession(activity);
++        return true;
++    }
++
++    public static boolean tryLaunchInSession(Activity activity, int containerId, String path, boolean shortcutFile) {
++        XServerDisplayActivity session = activeSession.get();
++        if (session == null || session.isFinishing() || session.container == null) return false;
++        if (session.container.id != containerId) {
++            AppUtils.showToast(activity, R.string.close_current_session);
++            showRunningSession(activity);
++            return true;
++        }
++        String dosPath;
++        String arguments = null;
++        if (shortcutFile) {
++            Shortcut shortcut = new Shortcut(session.container, new File(path));
++            dosPath = shortcut.path;
++            arguments = shortcut.getExtra("execArgs");
++        }
++        else dosPath = WineUtils.unixToDOSPath(path, session.container);
++        if (dosPath == null || dosPath.isEmpty()) return false;
++        if (dosPath.endsWith(".lnk")) session.winHandler.exec("start.exe", "\""+dosPath+"\""+(arguments == null || arguments.isEmpty() ? "" : " "+arguments));
++        else session.winHandler.exec(dosPath, arguments);
++        Intent intent = new Intent(activity, XServerDisplayActivity.class);
++        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
++        activity.startActivity(intent);
++        return true;
 +    }
 +
 +    private Button toolbarButton(String title, View.OnClickListener action) {
@@ -220,13 +902,18 @@ index 53fb456..338fcc2 100644
 +
 +        quickActions = new LinearLayout(this);
 +        quickActions.setOrientation(LinearLayout.HORIZONTAL);
-+        toolbar.addView(toolbarButton("≡", (v) -> quickActions.setVisibility(quickActions.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE)));
-+        toolbar.addView(quickActions);
++        toolbar.addView(toolbarButton("≡", (v) -> quickActionsScroll.setVisibility(quickActionsScroll.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE)));
++        quickActionsScroll = new HorizontalScrollView(this);
++        quickActionsScroll.setHorizontalScrollBarEnabled(false);
++        quickActionsScroll.addView(quickActions);
++        toolbar.addView(quickActionsScroll, new LinearLayout.LayoutParams((int)(getResources().getDisplayMetrics().widthPixels * 0.62f), LinearLayout.LayoutParams.WRAP_CONTENT));
++        quickActionsScroll.setVisibility(View.GONE);
++        toolbar.addView(toolbarButton(getString(R.string.exit), (v) -> exit()));
 +        quickActions.addView(toolbarButton(getString(R.string.run_exe), (v) -> showRunExePrompt()));
 +        quickActions.addView(toolbarButton(getString(R.string.toggle_fullscreen), (v) -> {
 +            renderer.toggleFullscreen();
 +            touchpadView.postDelayed(touchpadView::refreshTransform, 50);
-+            quickActions.setVisibility(View.GONE);
++            quickActionsScroll.setVisibility(View.GONE);
 +        }));
 +        quickActions.addView(toolbarButton(getString(R.string.keyboard), (v) -> AppUtils.showKeyboard(this)));
 +        quickActions.addView(toolbarButton(getString(R.string.reset_zoom), (v) -> {
@@ -235,19 +922,50 @@ index 53fb456..338fcc2 100644
 +        }));
 +        quickActions.addView(toolbarButton(getString(R.string.file_explorer), (v) -> winHandler.exec("wfm.exe", null)));
 +        quickActions.addView(toolbarButton(getString(R.string.running_apps), (v) -> (new ActiveWindowsDialog(this)).show()));
++        quickActions.addView(toolbarButton(getString(R.string.app_name), (v) -> startActivity(new Intent(this, MainActivity.class))));
++        quickActions.addView(toolbarButton(getString(R.string.logs), (v) -> debugDialog.show()));
 +        rootView.addView(toolbar);
 +    }
 +
      private void showInputControlsDialog() {
          final ContentDialog dialog = new ContentDialog(this, R.layout.input_controls_dialog);
          dialog.setTitle(R.string.input_controls);
-@@ -1123,4 +1188,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -1123,4 +1256,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
          else return false;
      }
 -}
 \ No newline at end of file
 +}
+diff --git a/app/src/main/java/com/winlator/contentdialog/ActiveWindowsDialog.java b/app/src/main/java/com/winlator/contentdialog/ActiveWindowsDialog.java
+index 9dcd964..9ae3310 100644
+--- a/app/src/main/java/com/winlator/contentdialog/ActiveWindowsDialog.java
++++ b/app/src/main/java/com/winlator/contentdialog/ActiveWindowsDialog.java
+@@ -18,6 +18,7 @@ import com.winlator.xserver.Drawable;
+ import com.winlator.xserver.Window;
+ import com.winlator.xserver.XLock;
+ import com.winlator.xserver.XServer;
++import com.winlator.winhandler.WinEnums;
+ 
+ import java.util.ArrayList;
+ 
+@@ -92,9 +93,16 @@ public class ActiveWindowsDialog extends ContentDialog {
+             }
+ 
+             ivWindow.setOnClickListener((v) -> {
++                activity.getWinHandler().showWindow(window.getHandle(), WinEnums.SW_RESTORE);
+                 activity.getWinHandler().bringToFront(window.getClassName(), window.getHandle());
+                 dismiss();
+             });
++            Button stateButton = itemView.findViewById(R.id.BTWindowState);
++            stateButton.setText(window.isIconic() ? R.string.restore : R.string.minimize);
++            stateButton.setOnClickListener(v -> {
++                activity.getWinHandler().showWindow(window.getHandle(), window.isIconic() ? WinEnums.SW_RESTORE : WinEnums.SW_MINIMIZE);
++                dismiss();
++            });
+ 
+             llWindowList.addView(itemView);
+         }
 diff --git a/app/src/main/java/com/winlator/core/AppUtils.java b/app/src/main/java/com/winlator/core/AppUtils.java
 index cac686e..ab93bf4 100644
 --- a/app/src/main/java/com/winlator/core/AppUtils.java
@@ -274,6 +992,24 @@ index b503fc0..8700402 100644
              intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
          }
          else intent = new Intent(Intent.ACTION_VIEW, Uri.parse(path));
+diff --git a/app/src/main/java/com/winlator/core/ProcessHelper.java b/app/src/main/java/com/winlator/core/ProcessHelper.java
+index 4651b83..1555643 100644
+--- a/app/src/main/java/com/winlator/core/ProcessHelper.java
++++ b/app/src/main/java/com/winlator/core/ProcessHelper.java
+@@ -89,7 +89,12 @@ public abstract class ProcessHelper {
+ 
+             if (terminationCallback != null) createWaitForThread(process, terminationCallback);
+         }
+-        catch (Exception e) {}
++        catch (Exception e) {
++            synchronized (debugCallbacks) {
++                for (Callback<String> callback : debugCallbacks) callback.call("Unable to start guest process: "+e);
++            }
++            if (terminationCallback != null) terminationCallback.call(-1);
++        }
+         return pid;
+     }
+ 
 diff --git a/app/src/main/java/com/winlator/renderer/GLRenderer.java b/app/src/main/java/com/winlator/renderer/GLRenderer.java
 index 48a8344..eb71c45 100644
 --- a/app/src/main/java/com/winlator/renderer/GLRenderer.java
@@ -395,8 +1131,153 @@ index c3f422c..87c1f28 100644
      private static final String CHANNEL_NAME = "Winlator Foreground Service";
  
      private final Context context;
+diff --git a/app/src/main/java/com/winlator/widget/LogView.java b/app/src/main/java/com/winlator/widget/LogView.java
+index 6343202..78fa688 100644
+--- a/app/src/main/java/com/winlator/widget/LogView.java
++++ b/app/src/main/java/com/winlator/widget/LogView.java
+@@ -1,11 +1,17 @@
+ package com.winlator.widget;
+ 
+ import android.content.Context;
++import android.content.ContentValues;
++import android.content.ContentUris;
+ import android.content.SharedPreferences;
++import android.database.Cursor;
+ import android.graphics.Canvas;
+ import android.graphics.Paint;
+ import android.graphics.PointF;
+ import android.os.Environment;
++import android.os.Build;
++import android.net.Uri;
++import android.provider.MediaStore;
+ import android.text.format.DateFormat;
+ import android.util.AttributeSet;
+ import android.view.MotionEvent;
+@@ -17,7 +23,6 @@ import androidx.preference.PreferenceManager;
+ import com.winlator.MainActivity;
+ import com.winlator.R;
+ import com.winlator.core.AppUtils;
+-import com.winlator.core.FileUtils;
+ import com.winlator.core.StreamUtils;
+ import com.winlator.core.UnitUtils;
+ import com.winlator.math.Mathf;
+@@ -26,8 +31,9 @@ import java.io.BufferedOutputStream;
+ import java.io.BufferedWriter;
+ import java.io.File;
+ import java.io.FileOutputStream;
+-import java.io.FileWriter;
+ import java.io.IOException;
++import java.io.OutputStream;
++import java.io.OutputStreamWriter;
+ import java.io.PrintStream;
+ import java.util.ArrayList;
+ 
+@@ -62,16 +68,14 @@ public class LogView extends View {
+         super(context, attrs, defStyleAttr, defStyleRes);
+ 
+         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+-        String logPath = preferences.getString("log_file", getLogFile().getPath());
+-        boolean saveToFile = preferences.getBoolean("save_logs_to_file", false);
+-
+-        File logFile = new File(logPath);
+-        FileUtils.delete(logFile);
++        String logPath = getLogFile().getPath();
++        boolean saveToFile = preferences.getBoolean("save_logs_to_file", true);
+ 
+         if (saveToFile) {
+             PrintStream printStream = null;
+             try {
+-                printStream = new PrintStream(new BufferedOutputStream(new FileOutputStream(logFile), StreamUtils.BUFFER_SIZE));
++                OutputStream output = openDownloadsLog(context, logPath);
++                if (output != null) printStream = new PrintStream(new BufferedOutputStream(output, StreamUtils.BUFFER_SIZE));
+             }
+             catch (IOException e) {}
+             this.printStream = printStream;
+@@ -212,35 +216,65 @@ public class LogView extends View {
+             printStream.append(line);
+             printStream.flush();
+         }
+-        else {
+-            synchronized (lock) {
+-                String content = line.replace("\n", "");
+-                if (content.isEmpty()) return;
+-                String logLine = "["+DateFormat.format("HH:mm:ss", System.currentTimeMillis())+"]  "+content;
+-                lines.add(logLine);
+-                computeScrollSize();
+-            }
+-            postInvalidate();
+-            if (MainActivity.DEBUG_MODE) System.out.println(line);
++        synchronized (lock) {
++            String content = line.replace("\n", "");
++            if (content.isEmpty()) return;
++            String logLine = "["+DateFormat.format("HH:mm:ss", System.currentTimeMillis())+"]  "+content;
++            lines.add(logLine);
++            if (lines.size() > 2000) lines.remove(0);
++            computeScrollSize();
+         }
++        postInvalidate();
++        if (MainActivity.DEBUG_MODE) System.out.println(line);
+     }
+ 
+     public static File getLogFile() {
+-        File parent = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Winlator");
+-        if (!parent.isDirectory()) parent.mkdirs();
++        File parent = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "MiniEXE");
+         return new File(parent, "logs.txt");
+     }
+ 
++    private static OutputStream openDownloadsLog(Context context, String legacyPath) throws IOException {
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
++            File file = new File(legacyPath);
++            File parent = file.getParentFile();
++            if (parent != null && !parent.isDirectory()) parent.mkdirs();
++            return new FileOutputStream(file, false);
++        }
++        String relativePath = Environment.DIRECTORY_DOWNLOADS + "/MiniEXE/";
++        Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
++        Uri item = null;
++        try (Cursor cursor = context.getContentResolver().query(collection,
++                new String[]{MediaStore.MediaColumns._ID},
++                MediaStore.MediaColumns.RELATIVE_PATH + "=? AND " + MediaStore.MediaColumns.DISPLAY_NAME + "=?",
++                new String[]{relativePath, "logs.txt"}, null)) {
++            if (cursor != null && cursor.moveToFirst()) item = ContentUris.withAppendedId(collection, cursor.getLong(0));
++        }
++        if (item == null) {
++            ContentValues values = new ContentValues();
++            values.put(MediaStore.MediaColumns.DISPLAY_NAME, "logs.txt");
++            values.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
++            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
++            item = context.getContentResolver().insert(collection, values);
++        }
++        if (item == null) throw new IOException("Unable to create Downloads log");
++        OutputStream output = context.getContentResolver().openOutputStream(item, "wt");
++        if (output == null) throw new IOException("Unable to open Downloads log");
++        return output;
++    }
++
+     public void exportToFile() {
+         final File logFile = getLogFile();
+         String logPath = logFile.getPath();
+-        if (logFile.isFile()) logFile.delete();
+-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile))) {
+-            synchronized (lock) {
+-                for (String line : lines) writer.write(line+"\n");
++        try {
++            if (printStream == null) {
++                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(openDownloadsLog(getContext(), logPath)))) {
++                    synchronized (lock) {
++                        for (String line : lines) writer.write(line+"\n");
++                    }
++                }
+             }
+ 
+-            String path = logPath.substring(logPath.indexOf(Environment.DIRECTORY_DOCUMENTS));
++            String path = logPath.substring(logPath.indexOf(Environment.DIRECTORY_DOWNLOADS));
+             Context context = getContext();
+             AppUtils.showToast(context, context.getString(R.string.logs_exported_to)+" "+path);
+         }
 diff --git a/app/src/main/java/com/winlator/widget/TouchpadView.java b/app/src/main/java/com/winlator/widget/TouchpadView.java
-index 5d04f4d..df15156 100644
+index 5d04f4d..02b0370 100644
 --- a/app/src/main/java/com/winlator/widget/TouchpadView.java
 +++ b/app/src/main/java/com/winlator/widget/TouchpadView.java
 @@ -14,6 +14,7 @@ import com.winlator.core.AppUtils;
@@ -407,7 +1288,7 @@ index 5d04f4d..df15156 100644
  import com.winlator.winhandler.MouseEventFlags;
  import com.winlator.winhandler.WinHandler;
  import com.winlator.xserver.Pointer;
-@@ -39,6 +40,11 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -39,6 +40,13 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
      private boolean scrolling = false;
      private final XServer xServer;
      private Runnable fourFingersTapCallback;
@@ -416,10 +1297,12 @@ index 5d04f4d..df15156 100644
 +    private float previousGestureDistance;
 +    private float previousGestureCenterX;
 +    private float previousGestureCenterY;
++    private float gestureStartDistance;
++    private boolean gesturePinching;
      private final float[] xform = XForm.getInstance();
  
      public TouchpadView(Context context, XServer xServer, boolean capturePointerOnExternalMouse) {
-@@ -85,6 +91,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -85,6 +93,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
          else XForm.makeScale(xform, invAspect, invAspect);
      }
  
@@ -430,7 +1313,7 @@ index 5d04f4d..df15156 100644
      private class Finger {
          private int x;
          private int y;
-@@ -93,9 +103,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -93,9 +105,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
          private int lastX;
          private int lastY;
          private final long touchTime;
@@ -442,7 +1325,7 @@ index 5d04f4d..df15156 100644
              this.x = this.startX = this.lastX = (int)transformedPoint[0];
              this.y = this.startY = this.lastY = (int)transformedPoint[1];
              touchTime = System.currentTimeMillis();
-@@ -104,7 +115,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -104,7 +117,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
          public void update(float x, float y) {
              lastX = this.x;
              lastY = this.y;
@@ -451,7 +1334,7 @@ index 5d04f4d..df15156 100644
              this.x = (int)transformedPoint[0];
              this.y = (int)transformedPoint[1];
          }
-@@ -134,6 +145,31 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -134,6 +147,48 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
          }
      }
  
@@ -472,9 +1355,26 @@ index 5d04f4d..df15156 100644
 +        float[] center = XForm.transformPoint(xform, (x1 + x2) * 0.5f, (y1 + y2) * 0.5f);
 +        if (previousGestureDistance > 0 && distance > 0) {
 +            GLRenderer renderer = xServer.getRenderer();
-+            renderer.zoomAt(renderer.getMagnifierZoom() * distance / previousGestureDistance, center[0], center[1]);
-+            renderer.panMagnifier(center[0] - previousGestureCenterX, center[1] - previousGestureCenterY);
++            if (Math.abs(distance - gestureStartDistance) > 12 * getResources().getDisplayMetrics().density) gesturePinching = true;
++            if (gesturePinching) {
++                renderer.zoomAt(renderer.getMagnifierZoom() * distance / previousGestureDistance, center[0], center[1]);
++                renderer.panMagnifier(center[0] - previousGestureCenterX, center[1] - previousGestureCenterY);
++            }
++            else if (renderer.getMagnifierZoom() > 1.01f) {
++                renderer.panMagnifier(center[0] - previousGestureCenterX, center[1] - previousGestureCenterY);
++            }
++            else {
++                scrollAccumY += center[1] - previousGestureCenterY;
++                float step = 40 * getResources().getDisplayMetrics().density;
++                while (Math.abs(scrollAccumY) >= step) {
++                    Pointer.Button button = scrollAccumY < 0 ? Pointer.Button.BUTTON_SCROLL_DOWN : Pointer.Button.BUTTON_SCROLL_UP;
++                    xServer.injectPointerButtonPress(button);
++                    xServer.injectPointerButtonRelease(button);
++                    scrollAccumY += scrollAccumY < 0 ? step : -step;
++                }
++            }
 +        }
++        else gestureStartDistance = distance;
 +        previousGestureDistance = distance;
 +        previousGestureCenterX = center[0];
 +        previousGestureCenterY = center[1];
@@ -483,7 +1383,7 @@ index 5d04f4d..df15156 100644
      @Override
      public boolean onTouchEvent(MotionEvent event) {
          int actionIndex = event.getActionIndex();
-@@ -141,6 +177,27 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -141,6 +196,29 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
          int actionMasked = event.getActionMasked();
          if (pointerId >= MAX_FINGERS) return true;
  
@@ -491,6 +1391,8 @@ index 5d04f4d..df15156 100644
 +            if (actionMasked == MotionEvent.ACTION_POINTER_DOWN && !viewportGesture && event.getPointerCount() == 2) {
 +                viewportGesture = true;
 +                previousGestureDistance = 0;
++                gesturePinching = false;
++                scrollAccumY = 0;
 +                if (xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_LEFT)) xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
 +                if (xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_RIGHT)) xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
 +                fingerPointerButtonLeft = fingerPointerButtonRight = null;
@@ -511,7 +1413,7 @@ index 5d04f4d..df15156 100644
          switch (actionMasked) {
              case MotionEvent.ACTION_DOWN:
              case MotionEvent.ACTION_POINTER_DOWN:
-@@ -149,10 +206,20 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -149,10 +227,20 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
                  scrolling = false;
                  fingers[pointerId] = new Finger(event.getX(actionIndex), event.getY(actionIndex));
                  numFingers++;
@@ -533,7 +1435,7 @@ index 5d04f4d..df15156 100644
                      if (isEnabled()) xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
                  }
                  else {
-@@ -193,7 +260,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -193,7 +281,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
      private void handleFingerUp(Finger finger1) {
          switch (numFingers) {
              case 1:
@@ -542,7 +1444,7 @@ index 5d04f4d..df15156 100644
                      if (moveCursorToTouchpoint) xServer.injectPointerMove(finger1.x, finger1.y);
                      pressPointerButtonLeft(finger1);
                  }
-@@ -218,6 +285,11 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -218,6 +306,11 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
  
      private void handleFingerMove(Finger finger1) {
          if (!isEnabled()) return;
@@ -554,7 +1456,7 @@ index 5d04f4d..df15156 100644
          boolean skipPointerMove = false;
  
          Finger finger2 = numFingers == 2 ? findSecondFinger(finger1) : null;
-@@ -345,6 +417,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -345,6 +438,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
          this.fourFingersTapCallback = fourFingersTapCallback;
      }
  
@@ -565,7 +1467,7 @@ index 5d04f4d..df15156 100644
      public boolean isMoveCursorToTouchpoint() {
          return moveCursorToTouchpoint;
      }
-@@ -377,7 +453,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
+@@ -377,7 +474,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
                      handled = true;
                      break;
                  case MotionEvent.ACTION_HOVER_MOVE:
@@ -574,6 +1476,25 @@ index 5d04f4d..df15156 100644
                      xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
                      handled = true;
                      break;
+diff --git a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+index 84c4702..c57f66e 100644
+--- a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
++++ b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+@@ -175,6 +175,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
+ 
+     @Override
+     public void onPause() {
++        if (PreferenceManager.getDefaultSharedPreferences(environment.getContext()).getBoolean("miniexe_keep_running_background", true)) return;
+         synchronized (lock) {
+             if (pid != -1) {
+                 List<ProcessHelper.PStat> processes = ProcessHelper.getChildProcesses();
+@@ -202,4 +203,4 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
 diff --git a/app/src/main/res/drawable/ic_miniexe_launcher.xml b/app/src/main/res/drawable/ic_miniexe_launcher.xml
 new file mode 100644
 index 0000000..858c247
@@ -593,6 +1514,40 @@ index 0000000..858c247
 +    <path android:fillColor="#19B89B" android:pathData="M48,65h28v5h-28z" />
 +    <path android:fillColor="#FFFFFF" android:pathData="M27,27h5v3h-5z M35,27h5v3h-5z" />
 +</vector>
+diff --git a/app/src/main/res/layout/active_window_list_item.xml b/app/src/main/res/layout/active_window_list_item.xml
+index 1653dfa..089d98a 100644
+--- a/app/src/main/res/layout/active_window_list_item.xml
++++ b/app/src/main/res/layout/active_window_list_item.xml
+@@ -56,4 +56,9 @@
+             android:visibility="gone"
+             app:tint="#bdbdbd" />
+     </FrameLayout>
+-</LinearLayout>
+\ No newline at end of file
++    <Button
++        android:id="@+id/BTWindowState"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="@string/minimize" />
++</LinearLayout>
+diff --git a/app/src/main/res/menu/main_menu.xml b/app/src/main/res/menu/main_menu.xml
+index 40a7b19..b972fd4 100644
+--- a/app/src/main/res/menu/main_menu.xml
++++ b/app/src/main/res/menu/main_menu.xml
+@@ -2,10 +2,11 @@
+ <menu
+   xmlns:android="http://schemas.android.com/apk/res/android">
+     <group android:checkableBehavior="single">
++        <item android:icon="@drawable/ic_miniexe_launcher" android:id="@+id/menu_item_home_screen" android:title="@string/app_name" />
+         <item android:icon="@drawable/icon_shortcut" android:id="@+id/menu_item_shortcuts" android:title="@string/shortcuts" />
+         <item android:icon="@drawable/icon_container" android:id="@+id/menu_item_containers" android:title="@string/containers" />
+         <item android:icon="@drawable/icon_input_controls" android:id="@+id/menu_item_input_controls" android:title="@string/input_controls" />
+         <item android:icon="@drawable/icon_settings" android:id="@+id/menu_item_settings" android:title="@string/settings" />
+         <item android:icon="@drawable/icon_about" android:id="@+id/menu_item_about" android:title="@string/about" />
+     </group>
+-</menu>
+\ No newline at end of file
++</menu>
 diff --git a/app/src/main/res/menu/xserver_menu.xml b/app/src/main/res/menu/xserver_menu.xml
 index 81fd492..f873750 100644
 --- a/app/src/main/res/menu/xserver_menu.xml
@@ -663,10 +1618,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..e4f34e1 100644
+index 61fcd5e..0de62a7 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,10 @@
+@@ -1,6 +1,22 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -674,11 +1629,23 @@ index 61fcd5e..e4f34e1 100644
 +    <string name="run_exe">Run EXE</string>
 +    <string name="file_explorer">File Explorer</string>
 +    <string name="running_apps">Running Apps</string>
++    <string name="installed_programs">Installed Programs</string>
++    <string name="recent_applications">Recent Applications</string>
++    <string name="pinned_programs">Pinned Programs</string>
++    <string name="pin_recent_hint">Long-press a recent program to pin it. Long-press a pinned program to remove it.</string>
++    <string name="advanced_mode">Advanced Mode</string>
++    <string name="advanced_settings">Advanced settings</string>
++    <string name="last_launch">Last launch</string>
++    <string name="program_ended_early">The Windows session ended early (exit code %1$d). Check the log for details.</string>
++    <string name="log_saved_to">Log: /sdcard/Download/MiniEXE/logs.txt</string>
++    <string name="close_current_session">Close the running session before switching containers.</string>
++    <string name="minimize">Minimize</string>
++    <string name="restore">Restore</string>
 +    <string name="reset_zoom">Reset Zoom</string>
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +355,10 @@
+@@ -351,10 +367,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
