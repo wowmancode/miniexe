@@ -33,6 +33,602 @@ index 1262c0d..4bfbb75 100644
              android:exported="false"
              android:grantUriPermissions="true">
  
+diff --git a/app/src/main/assets/miniexe/dependencies.json b/app/src/main/assets/miniexe/dependencies.json
+new file mode 100644
+index 0000000..8650ce3
+--- /dev/null
++++ b/app/src/main/assets/miniexe/dependencies.json
+@@ -0,0 +1,589 @@
++{
++ "categories": [
++  {
++   "id": "runtime",
++   "name": "Runtimes (.NET / Mono)"
++  },
++  {
++   "id": "vcrun",
++   "name": "Visual C++ runtimes"
++  },
++  {
++   "id": "directx",
++   "name": "DirectX"
++  },
++  {
++   "id": "media",
++   "name": "Media and DirectShow"
++  },
++  {
++   "id": "system",
++   "name": "Fonts and system libraries"
++  }
++ ],
++ "items": [
++  {
++   "id": "mono",
++   "name": "Wine Mono 10.1.0",
++   "category": "runtime",
++   "type": "installer",
++   "note": "Open-source .NET replacement used by Wine. Removed automatically if you install Microsoft .NET.",
++   "conflicts": [
++    "dotnet35sp1",
++    "dotnet40",
++    "dotnet45"
++   ],
++   "downloads": [
++    {
++     "url": "https://dl.winehq.org/wine/wine-mono/10.1.0/wine-mono-10.1.0-x86.msi",
++     "sha256": "c88c2431890bc32cacec8d7ea70e53a5ae4b95c8c55ca6e75ef8db0e4ccf1070",
++     "file": "wine-mono-10.1.0-x86.msi"
++    }
++   ],
++   "commands": [
++    "start /wait msiexec.exe /i {cache}\\wine-mono-10.1.0-x86.msi /qn"
++   ],
++   "verify": {
++    "files": [
++     "mono/mono-2.0"
++    ]
++   }
++  },
++  {
++   "id": "dotnet35sp1",
++   "name": "Microsoft .NET Framework 3.5 SP1",
++   "category": "runtime",
++   "type": "installer",
++   "note": "Large download. Experimental under Wine; installs alongside .NET 4.x.",
++   "conflicts": [
++    "mono"
++   ],
++   "removeMono": true,
++   "env": "WINEDLLOVERRIDES=ngen.exe=n",
++   "overrides": {
++    "native": [
++     "mscoree",
++     "mscorwks"
++    ]
++   },
++   "downloads": [
++    {
++     "url": "https://download.microsoft.com/download/2/0/e/20e90413-712f-438c-988e-fdaa79a8ac3d/dotnetfx35.exe",
++     "sha256": "0582515bde321e072f8673e829e175ed2e7a53e803127c50253af76528e66bc1",
++     "file": "dotnetfx35.exe"
++    }
++   ],
++   "commands": [
++    "start /wait {cache}\\dotnetfx35.exe /lang:ENU /q /norestart"
++   ],
++   "verify": {
++    "regDword": {
++     "key": "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5",
++     "name": "SP",
++     "min": 1
++    }
++   }
++  },
++  {
++   "id": "dotnet40",
++   "name": "Microsoft .NET Framework 4.0",
++   "category": "runtime",
++   "type": "installer",
++   "conflicts": [
++    "mono"
++   ],
++   "removeMono": true,
++   "winver": "winxp",
++   "env": "WINEDLLOVERRIDES=fusion=b",
++   "overrides": {
++    "native": [
++     "mscoree"
++    ]
++   },
++   "downloads": [
++    {
++     "url": "https://download.microsoft.com/download/9/5/A/95A9616B-7A37-4AF6-BC36-D6EA96C8DAAE/dotNetFx40_Full_x86_x64.exe",
++     "sha256": "65e064258f2e418816b304f646ff9e87af101e4c9552ab064bb74d281c38659f",
++     "file": "dotNetFx40_Full_x86_x64.exe"
++    }
++   ],
++   "commands": [
++    "start /wait {cache}\\dotNetFx40_Full_x86_x64.exe /q /c:\"install.exe /q\""
++   ],
++   "verify": {
++    "regDword": {
++     "key": "Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full",
++     "name": "Install",
++     "min": 1
++    }
++   }
++  },
++  {
++   "id": "dotnet45",
++   "name": "Microsoft .NET Framework 4.5",
++   "category": "runtime",
++   "type": "installer",
++   "note": "Replaces .NET 4.0 in this container (4.0 is installed first, then upgraded).",
++   "requires": [
++    "dotnet40"
++   ],
++   "replaces": [
++    "dotnet40"
++   ],
++   "conflicts": [
++    "mono"
++   ],
++   "removeMono": true,
++   "winver": "win7",
++   "env": "WINEDLLOVERRIDES=fusion=b",
++   "overrides": {
++    "native": [
++     "mscoree"
++    ]
++   },
++   "downloads": [
++    {
++     "url": "https://download.microsoft.com/download/b/a/4/ba4a7e71-2906-4b2d-a0e1-80cf16844f5f/dotnetfx45_full_x86_x64.exe",
++     "sha256": "a04d40e217b97326d46117d961ec4eda455e087b90637cb33dd6cc4a2c228d83",
++     "file": "dotnetfx45_full_x86_x64.exe"
++    }
++   ],
++   "commands": [
++    "start /wait {cache}\\dotnetfx45_full_x86_x64.exe /q /c:\"install.exe /q\""
++   ],
++   "verify": {
++    "regDword": {
++     "key": "Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full",
++     "name": "Release",
++     "min": 378389
++    }
++   }
++  },
++  {
++   "id": "vcrun2005",
++   "name": "Visual C++ 2005 (bundled)",
++   "category": "vcrun",
++   "type": "wincomponent",
++   "wincomponent": "vcrun2005",
++   "verify": {
++    "native": [
++     "winsxs/amd64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.6195_none_deadbeef/msvcr80.dll"
++    ]
++   }
++  },
++  {
++   "id": "vcrun2008",
++   "name": "Visual C++ 2008",
++   "category": "vcrun",
++   "type": "installer",
++   "downloads": [
++    {
++     "url": "https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe",
++     "sha256": "8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92",
++     "file": "vcredist_x86.exe"
++    },
++    {
++     "url": "https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x64.exe",
++     "sha256": "c5e273a4a16ab4d5471e91c7477719a2f45ddadb76c7f98a38fa5074a6838654",
++     "file": "vcredist_x64.exe"
++    }
++   ],
++   "overrides": {
++    "native,builtin": [
++     "atl90",
++     "msvcm90",
++     "msvcp90",
++     "msvcr90",
++     "vcomp90"
++    ]
++   },
++   "commands": [
++    "start /wait {cache}\\vcredist_x86.exe /q /norestart",
++    "start /wait {cache}\\vcredist_x64.exe /q /norestart"
++   ],
++   "verify": {
++    "regText": "Visual C++ 2008 Redistributable"
++   }
++  },
++  {
++   "id": "vcrun2010",
++   "name": "Visual C++ 2010 (bundled)",
++   "category": "vcrun",
++   "type": "wincomponent",
++   "wincomponent": "vcrun2010",
++   "verify": {
++    "native": [
++     "system32/msvcr100.dll"
++    ]
++   }
++  },
++  {
++   "id": "vcrun2012",
++   "name": "Visual C++ 2012",
++   "category": "vcrun",
++   "type": "installer",
++   "downloads": [
++    {
++     "url": "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe",
++     "sha256": "b924ad8062eaf4e70437c8be50fa612162795ff0839479546ce907ffa8d6e386",
++     "file": "vcredist_x86.exe"
++    },
++    {
++     "url": "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe",
++     "sha256": "681be3e5ba9fd3da02c09d7e565adfa078640ed66a0d58583efad2c1e3cc4064",
++     "file": "vcredist_x64.exe"
++    }
++   ],
++   "overrides": {
++    "native,builtin": [
++     "atl110",
++     "msvcp110",
++     "msvcr110",
++     "vcomp110"
++    ]
++   },
++   "commands": [
++    "start /wait {cache}\\vcredist_x86.exe /q /norestart",
++    "start /wait {cache}\\vcredist_x64.exe /q /norestart"
++   ],
++   "verify": {
++    "native": [
++     "syswow64/msvcr110.dll",
++     "system32/msvcr110.dll"
++    ]
++   }
++  },
++  {
++   "id": "vcrun2013",
++   "name": "Visual C++ 2013",
++   "category": "vcrun",
++   "type": "installer",
++   "downloads": [
++    {
++     "url": "https://download.microsoft.com/download/0/5/6/056dcda9-d667-4e27-8001-8a0c6971d6b1/vcredist_x86.exe",
++     "sha256": "89f4e593ea5541d1c53f983923124f9fd061a1c0c967339109e375c661573c17",
++     "file": "vcredist_x86.exe"
++    },
++    {
++     "url": "https://download.microsoft.com/download/0/5/6/056dcda9-d667-4e27-8001-8a0c6971d6b1/vcredist_x64.exe",
++     "sha256": "20e2645b7cd5873b1fa3462b99a665ac8d6e14aae83ded9d875fea35ffdd7d7e",
++     "file": "vcredist_x64.exe"
++    }
++   ],
++   "overrides": {
++    "native,builtin": [
++     "atl120",
++     "msvcp120",
++     "msvcr120",
++     "vcomp120"
++    ]
++   },
++   "commands": [
++    "start /wait {cache}\\vcredist_x86.exe /q /norestart",
++    "start /wait {cache}\\vcredist_x64.exe /q /norestart"
++   ],
++   "verify": {
++    "native": [
++     "syswow64/msvcr120.dll",
++     "system32/msvcr120.dll"
++    ]
++   }
++  },
++  {
++   "id": "vcrun2022",
++   "name": "Visual C++ 2015-2022 (covers 2015, 2017, 2019)",
++   "category": "vcrun",
++   "type": "installer",
++   "note": "Microsoft updates this download in place; if the checksum no longer matches, the install stops with an error.",
++   "downloads": [
++    {
++     "url": "https://aka.ms/vs/17/release/vc_redist.x86.exe",
++     "sha256": "0c09f2611660441084ce0df425c51c11e147e6447963c3690f97e0b25c55ed64",
++     "file": "vc_redist.x86.exe"
++    },
++    {
++     "url": "https://aka.ms/vs/17/release/vc_redist.x64.exe",
++     "sha256": "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b",
++     "file": "vc_redist.x64.exe"
++    }
++   ],
++   "overrides": {
++    "native,builtin": [
++     "concrt140",
++     "msvcp140",
++     "msvcp140_1",
++     "msvcp140_2",
++     "msvcp140_atomic_wait",
++     "msvcp140_codecvt_ids",
++     "vcamp140",
++     "vccorlib140",
++     "vcomp140",
++     "vcruntime140",
++     "vcruntime140_1"
++    ]
++   },
++   "commands": [
++    "start /wait {cache}\\vc_redist.x86.exe /install /quiet /norestart",
++    "start /wait {cache}\\vc_redist.x64.exe /install /quiet /norestart"
++   ],
++   "verify": {
++    "native": [
++     "syswow64/vcruntime140.dll",
++     "syswow64/msvcp140.dll",
++     "system32/vcruntime140.dll",
++     "system32/msvcp140.dll"
++    ]
++   }
++  },
++  {
++   "id": "direct3d",
++   "name": "DirectX 9-11 helper libraries (D3DX, D3DCompiler)",
++   "category": "directx",
++   "type": "wincomponent",
++   "wincomponent": "direct3d",
++   "verify": {
++    "native": [
++     "system32/d3dcompiler_43.dll"
++    ]
++   },
++   "note": "Direct3D 9/10/11 rendering itself goes through the container's DX wrapper (DXVK, VKD3D or WineD3D) in Container Settings."
++  },
++  {
++   "id": "directsound",
++   "name": "DirectSound",
++   "category": "directx",
++   "type": "wincomponent",
++   "wincomponent": "directsound",
++   "verify": {
++    "native": [
++     "system32/dsound.dll"
++    ]
++   }
++  },
++  {
++   "id": "directmusic",
++   "name": "DirectMusic",
++   "category": "directx",
++   "type": "wincomponent",
++   "wincomponent": "directmusic",
++   "verify": {
++    "native": [
++     "syswow64/dmusic.dll"
++    ]
++   }
++  },
++  {
++   "id": "xaudio",
++   "name": "XAudio2 / XACT / X3DAudio",
++   "category": "directx",
++   "type": "wincomponent",
++   "wincomponent": "xaudio",
++   "verify": {
++    "native": [
++     "system32/xactengine3_5.dll"
++    ]
++   }
++  },
++  {
++   "id": "directplay",
++   "name": "DirectPlay",
++   "category": "directx",
++   "type": "wincomponent",
++   "wincomponent": "directplay",
++   "verify": {
++    "native": [
++     "syswow64/dplayx.dll"
++    ]
++   }
++  },
++  {
++   "id": "directshow",
++   "name": "DirectShow (quartz, qedit, qcap)",
++   "category": "media",
++   "type": "wincomponent",
++   "wincomponent": "directshow",
++   "verify": {
++    "native": [
++     "system32/quartz.dll"
++    ]
++   }
++  },
++  {
++   "id": "wmdecoder",
++   "name": "Windows Media decoders (WMV/WMA)",
++   "category": "media",
++   "type": "wincomponent",
++   "wincomponent": "wmdecoder",
++   "verify": {
++    "native": [
++     "syswow64/wmvcore.dll"
++    ]
++   }
++  },
++  {
++   "id": "corefonts",
++   "name": "Core fonts (Arial, Times New Roman, Courier, Verdana...)",
++   "category": "system",
++   "type": "installer",
++   "downloads": [
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/andale32.exe",
++     "sha256": "0524fe42951adc3a7eb870e32f0920313c71f170c859b5f770d82b4ee111e970",
++     "file": "andale32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/arial32.exe",
++     "sha256": "85297a4d146e9c87ac6f74822734bdee5f4b2a722d7eaa584b7f2cbf76f478f6",
++     "file": "arial32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/arialb32.exe",
++     "sha256": "a425f0ffb6a1a5ede5b979ed6177f4f4f4fdef6ae7c302a7b7720ef332fec0a8",
++     "file": "arialb32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/comic32.exe",
++     "sha256": "9c6df3feefde26d4e41d4a4fe5db2a89f9123a772594d7f59afd062625cd204e",
++     "file": "comic32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/courie32.exe",
++     "sha256": "bb511d861655dde879ae552eb86b134d6fae67cb58502e6ff73ec5d9151f3384",
++     "file": "courie32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/georgi32.exe",
++     "sha256": "2c2c7dcda6606ea5cf08918fb7cd3f3359e9e84338dc690013f20cd42e930301",
++     "file": "georgi32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/impact32.exe",
++     "sha256": "6061ef3b7401d9642f5dfdb5f2b376aa14663f6275e60a51207ad4facf2fccfb",
++     "file": "impact32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/times32.exe",
++     "sha256": "db56595ec6ef5d3de5c24994f001f03b2a13e37cee27bc25c58f6f43e8f807ab",
++     "file": "times32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/trebuc32.exe",
++     "sha256": "5a690d9bb8510be1b8b4fe49f1f2319651fe51bbe54775ddddd8ef0bd07fdac9",
++     "file": "trebuc32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/verdan32.exe",
++     "sha256": "c1cb61255e363166794e47664e2f21af8e3a26cb6346eb8d2ae2fa85dd5aad96",
++     "file": "verdan32.exe",
++     "extractCab": true
++    },
++    {
++     "url": "https://raw.githubusercontent.com/pushcx/corefonts/master/webdin32.exe",
++     "sha256": "64595b5abc1080fba8610c5c34fab5863408e806aafe84653ca8575bed17d75a",
++     "file": "webdin32.exe",
++     "extractCab": true
++    }
++   ],
++   "commands": [
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\andale32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\arial32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\arialb32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\comic32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\courie32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\georgi32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\impact32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\times32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\trebuc32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\verdan32.cab",
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\webdin32.cab",
++    "copy /Y {tmp}\\*.ttf C:\\windows\\Fonts\\"
++   ],
++   "verify": {
++    "files": [
++     "Fonts/arial.ttf",
++     "Fonts/times.ttf",
++     "Fonts/cour.ttf",
++     "Fonts/verdana.ttf"
++    ]
++   }
++  },
++  {
++   "id": "msxml3",
++   "name": "MSXML 3",
++   "category": "system",
++   "type": "installer",
++   "note": "32-bit only.",
++   "overrides": {
++    "native": [
++     "msxml3"
++    ]
++   },
++   "downloads": [
++    {
++     "url": "https://media.codeweavers.com/pub/other/msxml3.msi",
++     "sha256": "f9c678f8217e9d4f9647e8a1f6d89a7c26a57b9e9e00d39f7487493dd7b4e36c",
++     "file": "msxml3.msi"
++    }
++   ],
++   "commands": [
++    "start /wait msiexec.exe /i {cache}\\msxml3.msi /qn"
++   ],
++   "verify": {
++    "native": [
++     "syswow64/msxml3.dll"
++    ]
++   }
++  },
++  {
++   "id": "msxml6",
++   "name": "MSXML 6 SP2",
++   "category": "system",
++   "type": "installer",
++   "overrides": {
++    "native,builtin": [
++     "msxml6"
++    ]
++   },
++   "downloads": [
++    {
++     "url": "https://download.microsoft.com/download/2/7/7/277681BE-4048-4A58-ABBA-259C465B1699/msxml6-KB2957482-enu-amd64.exe",
++     "sha256": "260cd870851ffc3c6d10b71691f134e20d8d03ac26073bb36951eacb7aa85897",
++     "file": "msxml6-KB2957482-enu-amd64.exe",
++     "extractCab": true
++    }
++   ],
++   "commands": [
++    "start /wait extrac32.exe /Y /E /L {tmp} {cache}\\msxml6-KB2957482-enu-amd64.cab",
++    "start /wait msiexec.exe /i {tmp}\\msxml6.msi /qn"
++   ],
++   "verify": {
++    "native": [
++     "syswow64/msxml6.dll"
++    ]
++   }
++  },
++  {
++   "id": "gdiplus",
++   "name": "GDI / GDI+",
++   "category": "system",
++   "type": "info",
++   "note": "Provided by Wine's built-in GDI and GDI+. No separate download is offered."
++  },
++  {
++   "id": "dx1011",
++   "name": "Direct3D 10/11/12 rendering",
++   "category": "directx",
++   "type": "info",
++   "note": "Handled by the container's DX wrapper (DXVK for 9-11, VKD3D for 12). Change it in Container Settings."
++  }
++ ]
++}
+\ No newline at end of file
 diff --git a/app/src/main/cpp/gladiorenderer/include/gladio.h b/app/src/main/cpp/gladiorenderer/include/gladio.h
 index 3563172..db21138 100644
 --- a/app/src/main/cpp/gladiorenderer/include/gladio.h
@@ -121,6 +717,1021 @@ index aab4c0a..f816182 100644
              Intent intent = new Intent(activity, XServerDisplayActivity.class);
              intent.putExtra("container_id", container.id);
              activity.startActivity(intent);
+diff --git a/app/src/main/java/com/winlator/DependenciesFragment.java b/app/src/main/java/com/winlator/DependenciesFragment.java
+new file mode 100644
+index 0000000..8c26cda
+--- /dev/null
++++ b/app/src/main/java/com/winlator/DependenciesFragment.java
+@@ -0,0 +1,426 @@
++package com.winlator;
++
++import android.app.Activity;
++import android.os.Bundle;
++import android.text.format.Formatter;
++import android.view.Gravity;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.Button;
++import android.widget.CheckBox;
++import android.widget.LinearLayout;
++import android.widget.ProgressBar;
++import android.widget.ScrollView;
++import android.widget.TextView;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.appcompat.app.AlertDialog;
++import androidx.fragment.app.Fragment;
++import androidx.preference.PreferenceManager;
++
++import com.winlator.container.Container;
++import com.winlator.container.ContainerManager;
++
++import java.io.File;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.atomic.AtomicBoolean;
++
++/** Optional dependency picker. Nothing here is required; Skip leaves the container untouched. */
++public class DependenciesFragment extends Fragment {
++    private final boolean firstRun;
++    private LinearLayout content;
++    private DependencyManager.Catalog catalog;
++    private final Map<String, CheckBox> checks = new HashMap<>();
++    private final Map<String, TextView> details = new HashMap<>();
++    private final Map<String, DependencyManager.Status> statuses = new HashMap<>();
++    private final Map<String, Long> remoteSizes = new HashMap<>();
++    private final ExecutorService executor = Executors.newSingleThreadExecutor();
++    private boolean updating;
++
++    public DependenciesFragment() {
++        this(false);
++    }
++
++    public DependenciesFragment(boolean firstRun) {
++        this.firstRun = firstRun;
++    }
++
++    @Nullable
++    @Override
++    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup parent, @Nullable Bundle state) {
++        catalog = DependencyManager.loadCatalog(requireContext());
++        ScrollView scroll = new ScrollView(requireContext());
++        content = new LinearLayout(requireContext());
++        content.setOrientation(LinearLayout.VERTICAL);
++        int padding = dp(16);
++        content.setPadding(padding, padding, padding, padding);
++        scroll.addView(content);
++        PreferenceManager.getDefaultSharedPreferences(requireContext()).edit().putBoolean(DependencyManager.PROMPTED_KEY, true).apply();
++        return scroll;
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        requireActivity().setTitle(R.string.dependencies);
++        populate();
++    }
++
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++        executor.shutdownNow();
++    }
++
++    private int dp(int value) {
++        return (int)(value * getResources().getDisplayMetrics().density);
++    }
++
++    private TextView text(CharSequence value, int sizeSp) {
++        TextView view = new TextView(requireContext());
++        view.setText(value);
++        if (sizeSp > 0) view.setTextSize(sizeSp);
++        content.addView(view);
++        return view;
++    }
++
++    private Button button(int label, View.OnClickListener listener) {
++        Button button = new Button(requireContext());
++        button.setAllCaps(false);
++        button.setText(label);
++        button.setOnClickListener(listener);
++        content.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++        return button;
++    }
++
++    private void populate() {
++        if (content == null) return;
++        content.removeAllViews();
++        checks.clear();
++        details.clear();
++        statuses.clear();
++
++        MainActivity activity = (MainActivity)requireActivity();
++        ContainerManager manager = new ContainerManager(requireContext());
++        Container container = activity.getHomeContainer(manager);
++
++        text(getString(R.string.dependencies), 22);
++        text(getString(R.string.deps_intro), 0);
++        text(container != null ? getString(R.string.deps_target_container, container.getName()) : getString(R.string.deps_no_container), 0);
++        if (container != null && XServerDisplayActivity.getActiveContainerId() == container.id) {
++            text(getString(R.string.deps_session_running), 0);
++        }
++
++        DependencyManager.Snapshot snapshot = container != null ? DependencyManager.snapshot(container) : null;
++        updating = true;
++        for (Map.Entry<String, String> category : catalog.categories.entrySet()) {
++            TextView heading = text(category.getValue(), 18);
++            heading.setPadding(0, dp(14), 0, dp(4));
++            for (DependencyManager.Item item : catalog.items) {
++                if (item.category.equals(category.getKey())) addItem(item, container, snapshot);
++            }
++        }
++        updating = false;
++        refreshDetails();
++
++        LinearLayout.LayoutParams spacer = new LinearLayout.LayoutParams(1, dp(12));
++        content.addView(new View(requireContext()), spacer);
++        button(R.string.deps_install_selected, v -> installSelected());
++        button(firstRun ? R.string.skip : R.string.done, v -> activity.showFragment(new MiniHomeFragment()));
++        long cache = DependencyManager.cacheSize(requireContext());
++        if (cache > 0) {
++            button(R.string.deps_clear_cache, v -> {
++                DependencyManager.clearCache(requireContext());
++                populate();
++            }).setText(getString(R.string.deps_clear_cache_size, Formatter.formatShortFileSize(requireContext(), cache)));
++        }
++        fetchSizes();
++    }
++
++    private void addItem(DependencyManager.Item item, Container container, DependencyManager.Snapshot snapshot) {
++        DependencyManager.Status status = snapshot != null
++                ? DependencyManager.status(requireContext(), item, snapshot)
++                : new DependencyManager.Status(item.isInfo() ? DependencyManager.State.INFO : DependencyManager.State.NOT_INSTALLED, item.note);
++        statuses.put(item.id, status);
++
++        if (item.isInfo()) {
++            TextView name = text(item.name, 16);
++            name.setPadding(dp(8), dp(6), 0, 0);
++            TextView note = text(item.note, 0);
++            note.setPadding(dp(8), 0, 0, dp(4));
++            return;
++        }
++
++        CheckBox check = new CheckBox(requireContext());
++        check.setText(item.name);
++        check.setGravity(Gravity.CENTER_VERTICAL);
++        if (item.isWinComponent()) {
++            check.setChecked(container != null ? DependencyManager.isWinComponentEnabled(container, item) : false);
++        }
++        else if (status.state == DependencyManager.State.INSTALLED || isReplacedByInstalled(item)) {
++            check.setChecked(true);
++            check.setEnabled(false);
++        }
++        check.setOnCheckedChangeListener((button, checked) -> onToggled(item, checked));
++        content.addView(check);
++        checks.put(item.id, check);
++
++        TextView detail = new TextView(requireContext());
++        detail.setPadding(dp(32), 0, 0, dp(6));
++        content.addView(detail);
++        details.put(item.id, detail);
++    }
++
++    private boolean isReplacedByInstalled(DependencyManager.Item item) {
++        for (DependencyManager.Item other : catalog.items) {
++            DependencyManager.Status status = statuses.get(other.id);
++            if (other.replaces.contains(item.id) && status != null && status.state == DependencyManager.State.INSTALLED) return true;
++        }
++        return false;
++    }
++
++    private boolean isInstalled(String id) {
++        DependencyManager.Status status = statuses.get(id);
++        return status != null && status.state == DependencyManager.State.INSTALLED;
++    }
++
++    /** Selection rules: requirements are selected too, and conflicting items are deselected. */
++    private void onToggled(DependencyManager.Item item, boolean checked) {
++        if (updating) return;
++        updating = true;
++        if (checked) {
++            for (String required : item.requires) {
++                CheckBox box = checks.get(required);
++                if (box != null && box.isEnabled()) box.setChecked(true);
++            }
++            for (String conflict : item.conflicts) {
++                CheckBox box = checks.get(conflict);
++                if (box != null && box.isEnabled()) box.setChecked(false);
++            }
++        }
++        else {
++            for (DependencyManager.Item other : catalog.items) {
++                CheckBox box = checks.get(other.id);
++                if (other.requires.contains(item.id) && box != null && box.isEnabled() && !item.isWinComponent()) box.setChecked(false);
++            }
++        }
++        updating = false;
++        refreshDetails();
++    }
++
++    private void refreshDetails() {
++        if (!isAdded()) return;
++        for (DependencyManager.Item item : catalog.items) {
++            TextView detail = details.get(item.id);
++            if (detail == null) continue;
++            DependencyManager.Status status = statuses.get(item.id);
++            StringBuilder sb = new StringBuilder();
++            switch (status.state) {
++                case INSTALLED: sb.append(getString(R.string.deps_installed)); break;
++                case PENDING_RESTART: sb.append(getString(R.string.deps_pending_restart)); break;
++                case FAILED: sb.append(getString(R.string.deps_failed, status.detail)); break;
++                default:
++                    if (isReplacedByInstalled(item)) sb.append(getString(R.string.deps_replaced));
++                    else if (item.isWinComponent()) sb.append(getString(R.string.deps_bundled));
++                    else sb.append(getString(R.string.deps_not_installed));
++            }
++            if (item.isInstaller() && status.state != DependencyManager.State.INSTALLED && !isReplacedByInstalled(item)) {
++                sb.append(" · ");
++                if (DependencyManager.isCached(requireContext(), item)) {
++                    sb.append(getString(R.string.deps_cached, Formatter.formatShortFileSize(requireContext(), DependencyManager.cachedSize(requireContext(), item))));
++                }
++                else {
++                    Long size = remoteSizes.get(item.id);
++                    sb.append(size == null ? getString(R.string.deps_size_checking)
++                            : size < 0 ? getString(R.string.deps_size_unknown)
++                            : getString(R.string.deps_download_size, Formatter.formatShortFileSize(requireContext(), size)));
++                }
++            }
++            if (!item.note.isEmpty()) sb.append("\n").append(item.note);
++            detail.setText(sb);
++        }
++    }
++
++    private void fetchSizes() {
++        Activity activity = requireActivity();
++        for (DependencyManager.Item item : catalog.items) {
++            if (!item.isInstaller() || remoteSizes.containsKey(item.id) || isInstalled(item.id)) continue;
++            if (DependencyManager.isCached(requireContext(), item)) continue;
++            executor.execute(() -> {
++                long total = 0;
++                for (DependencyManager.Download download : item.downloads) {
++                    long size = DependencyManager.remoteSize(download);
++                    if (size < 0) { total = -1; break; }
++                    total += size;
++                }
++                final long result = total;
++                activity.runOnUiThread(() -> {
++                    remoteSizes.put(item.id, result);
++                    refreshDetails();
++                });
++            });
++        }
++    }
++
++    private void installSelected() {
++        MainActivity activity = (MainActivity)requireActivity();
++        activity.withHomeContainer(container -> {
++            if (!isAdded()) return;
++            DependencyManager.Snapshot snapshot = DependencyManager.snapshot(container);
++            boolean wincomponentsChanged = false;
++            List<DependencyManager.Item> installers = new ArrayList<>();
++            Set<String> wanted = new LinkedHashSet<>();
++            for (DependencyManager.Item item : catalog.items) {
++                CheckBox box = checks.get(item.id);
++                if (box == null) continue;
++                if (item.isWinComponent()) {
++                    boolean enabled = DependencyManager.isWinComponentEnabled(container, item);
++                    if (box.isChecked() != enabled) {
++                        DependencyManager.setWinComponent(container, item, box.isChecked());
++                        wincomponentsChanged = true;
++                    }
++                }
++                else if (item.isInstaller() && box.isEnabled() && box.isChecked()) {
++                    if (DependencyManager.status(requireContext(), item, snapshot).state != DependencyManager.State.INSTALLED) wanted.add(item.id);
++                }
++            }
++            for (DependencyManager.Item item : catalog.items) if (wanted.contains(item.id)) installers.add(item);
++
++            if (installers.isEmpty()) {
++                new AlertDialog.Builder(requireContext())
++                        .setMessage(wincomponentsChanged ? R.string.deps_components_saved : R.string.deps_nothing_selected)
++                        .setPositiveButton(android.R.string.ok, null)
++                        .show();
++                populate();
++                return;
++            }
++
++            DependencyManager.Item mono = catalog.get("mono");
++            boolean monoInstalled = mono != null && DependencyManager.status(requireContext(), mono, snapshot).state == DependencyManager.State.INSTALLED;
++            List<DependencyManager.Item> toDownload = new ArrayList<>(installers);
++            boolean anyRemovesMono = false;
++            for (DependencyManager.Item item : installers) anyRemovesMono |= item.removeMono;
++            final boolean needsMonoRemoval = anyRemovesMono;
++            if (needsMonoRemoval && monoInstalled && !toDownload.contains(mono)) toDownload.add(0, mono);
++
++            downloadAll(toDownload, (errors, failed) -> {
++                List<DependencyManager.Item> ready = new ArrayList<>();
++                for (DependencyManager.Item item : installers) {
++                    boolean missingRequirement = false;
++                    for (String req : item.requires) missingRequirement |= failed.contains(req);
++                    if (!failed.contains(item.id) && !missingRequirement) ready.add(item);
++                }
++                boolean monoUsable = !(needsMonoRemoval && monoInstalled && failed.contains("mono"));
++                if (!monoUsable) {
++                    ready.removeIf(item -> item.removeMono);
++                    errors.add(getString(R.string.deps_mono_cache_missing));
++                }
++                Runnable start = () -> {
++                    if (ready.isEmpty()) { populate(); return; }
++                    try {
++                        File script = DependencyManager.writeInstallScript(requireContext(), container, catalog, ready, monoInstalled);
++                        DependencyManager.launch(requireActivity(), container, script);
++                    }
++                    catch (Exception e) {
++                        errors.add(e.toString());
++                        showErrors(errors, null);
++                    }
++                };
++                if (errors.isEmpty()) start.run();
++                else showErrors(errors, ready.isEmpty() ? null : start);
++            });
++        });
++    }
++
++    private void showErrors(List<String> errors, @Nullable Runnable continueAction) {
++        if (!isAdded()) return;
++        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext())
++                .setTitle(R.string.deps_download_errors)
++                .setMessage(String.join("\n\n", errors));
++        if (continueAction != null) {
++            builder.setPositiveButton(R.string.deps_install_remaining, (d, w) -> continueAction.run());
++            builder.setNegativeButton(android.R.string.cancel, (d, w) -> populate());
++        }
++        else builder.setPositiveButton(android.R.string.ok, (d, w) -> populate());
++        builder.show();
++    }
++
++    private interface DownloadResult {
++        void done(List<String> errors, Set<String> failed);
++    }
++
++    private void downloadAll(List<DependencyManager.Item> items, DownloadResult result) {
++        Activity activity = requireActivity();
++        List<DependencyManager.Download> pending = new ArrayList<>();
++        List<DependencyManager.Item> owners = new ArrayList<>();
++        for (DependencyManager.Item item : items) {
++            for (DependencyManager.Download download : item.downloads) {
++                if (!DependencyManager.isCached(activity, item, download)) {
++                    pending.add(download);
++                    owners.add(item);
++                }
++            }
++        }
++        if (pending.isEmpty()) {
++            result.done(new ArrayList<>(), new LinkedHashSet<>());
++            return;
++        }
++
++        AtomicBoolean cancelled = new AtomicBoolean();
++        LinearLayout layout = new LinearLayout(activity);
++        layout.setOrientation(LinearLayout.VERTICAL);
++        layout.setPadding(dp(20), dp(16), dp(20), 0);
++        TextView label = new TextView(activity);
++        ProgressBar bar = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
++        bar.setMax(1000);
++        layout.addView(label);
++        layout.addView(bar);
++        AlertDialog dialog = new AlertDialog.Builder(activity)
++                .setTitle(R.string.deps_downloading)
++                .setView(layout)
++                .setCancelable(false)
++                .setNegativeButton(android.R.string.cancel, (d, w) -> cancelled.set(true))
++                .show();
++
++        executor.execute(() -> {
++            List<String> errors = new ArrayList<>();
++            Set<String> failed = new LinkedHashSet<>();
++            for (int i = 0; i < pending.size(); i++) {
++                DependencyManager.Item item = owners.get(i);
++                DependencyManager.Download download = pending.get(i);
++                if (failed.contains(item.id)) continue;
++                if (cancelled.get()) { failed.add(item.id); continue; }
++                final String caption = (i + 1) + "/" + pending.size() + "  " + item.name + "\n" + download.file;
++                activity.runOnUiThread(() -> { label.setText(caption); bar.setIndeterminate(true); });
++                String error = DependencyManager.download(activity, item, download, cancelled, (done, total) -> {
++                    if (total <= 0) return;
++                    int value = (int)(done * 1000 / total);
++                    activity.runOnUiThread(() -> {
++                        bar.setIndeterminate(false);
++                        bar.setProgress(value);
++                        label.setText(caption + "\n" + Formatter.formatShortFileSize(activity, done) + " / " + Formatter.formatShortFileSize(activity, total));
++                    });
++                });
++                if (error != null) {
++                    failed.add(item.id);
++                    if (!cancelled.get()) errors.add(item.name + ": " + error);
++                }
++            }
++            activity.runOnUiThread(() -> {
++                try { dialog.dismiss(); } catch (Exception ignored) {}
++                if (!isAdded()) return;
++                if (cancelled.get()) { populate(); return; }
++                result.done(errors, failed);
++            });
++        });
++    }
++}
+diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
+new file mode 100644
+index 0000000..8ec484c
+--- /dev/null
++++ b/app/src/main/java/com/winlator/DependencyManager.java
+@@ -0,0 +1,577 @@
++package com.winlator;
++
++import android.app.Activity;
++import android.content.Context;
++import android.content.Intent;
++
++import com.winlator.container.Container;
++import com.winlator.core.FileUtils;
++import com.winlator.core.KeyValueSet;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.io.BufferedInputStream;
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.FileReader;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.io.RandomAccessFile;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.nio.ByteBuffer;
++import java.nio.ByteOrder;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.concurrent.atomic.AtomicBoolean;
++
++/**
++ * Optional Windows dependencies for a MiniEXE container.
++ *
++ * Two kinds are supported: Winlator's bundled "wincomponents" (native DLL sets shipped in the
++ * APK and applied at session start) and official redistributable installers that are downloaded,
++ * checked against a pinned SHA-256, cached, and run inside the container's Wine session through a
++ * generated batch file. Installed status is always derived from the container's files and
++ * registry, never from the fact that an installer was started.
++ */
++public final class DependencyManager {
++    public static final String PROMPTED_KEY = "miniexe_deps_prompted";
++    private static final String INSTALL_DIR = "miniexe";
++
++    public enum State { INSTALLED, PENDING_RESTART, FAILED, NOT_INSTALLED, INFO }
++
++    public static final class Download {
++        public final String url;
++        public final String sha256;
++        public final String file;
++        public final boolean extractCab;
++
++        Download(JSONObject json) {
++            url = json.optString("url");
++            sha256 = json.optString("sha256").toLowerCase(Locale.ENGLISH);
++            file = json.optString("file");
++            extractCab = json.optBoolean("extractCab");
++        }
++    }
++
++    public static final class Item {
++        public final String id;
++        public final String name;
++        public final String category;
++        public final String type;
++        public final String note;
++        public final String wincomponent;
++        public final String winver;
++        public final String env;
++        public final boolean removeMono;
++        public final List<String> requires;
++        public final List<String> replaces;
++        public final List<String> conflicts;
++        public final List<Download> downloads = new ArrayList<>();
++        public final List<String> commands;
++        public final Map<String, List<String>> overrides = new LinkedHashMap<>();
++        public final JSONObject verify;
++
++        Item(JSONObject json) {
++            id = json.optString("id");
++            name = json.optString("name");
++            category = json.optString("category");
++            type = json.optString("type");
++            note = json.optString("note", "");
++            wincomponent = json.optString("wincomponent", "");
++            winver = json.optString("winver", "");
++            env = json.optString("env", "");
++            removeMono = json.optBoolean("removeMono");
++            requires = strings(json.optJSONArray("requires"));
++            replaces = strings(json.optJSONArray("replaces"));
++            conflicts = strings(json.optJSONArray("conflicts"));
++            commands = strings(json.optJSONArray("commands"));
++            JSONArray dl = json.optJSONArray("downloads");
++            if (dl != null) for (int i = 0; i < dl.length(); i++) downloads.add(new Download(dl.optJSONObject(i)));
++            JSONObject ov = json.optJSONObject("overrides");
++            if (ov != null) {
++                JSONArray names = ov.names();
++                if (names != null) for (int i = 0; i < names.length(); i++) {
++                    String mode = names.optString(i);
++                    overrides.put(mode, strings(ov.optJSONArray(mode)));
++                }
++            }
++            verify = json.optJSONObject("verify");
++        }
++
++        public boolean isInstaller() { return "installer".equals(type); }
++        public boolean isWinComponent() { return "wincomponent".equals(type); }
++        public boolean isInfo() { return "info".equals(type); }
++    }
++
++    public static final class Catalog {
++        public final LinkedHashMap<String, String> categories = new LinkedHashMap<>();
++        public final List<Item> items = new ArrayList<>();
++
++        public Item get(String id) {
++            for (Item item : items) if (item.id.equals(id)) return item;
++            return null;
++        }
++    }
++
++    public static final class Status {
++        public final State state;
++        public final String detail;
++
++        Status(State state, String detail) {
++            this.state = state;
++            this.detail = detail;
++        }
++    }
++
++    private DependencyManager() {}
++
++    private static List<String> strings(JSONArray array) {
++        ArrayList<String> list = new ArrayList<>();
++        if (array != null) for (int i = 0; i < array.length(); i++) list.add(array.optString(i));
++        return list;
++    }
++
++    public static Catalog loadCatalog(Context context) {
++        Catalog catalog = new Catalog();
++        try {
++            JSONObject json = new JSONObject(FileUtils.readString(context, "miniexe/dependencies.json"));
++            JSONArray categories = json.getJSONArray("categories");
++            for (int i = 0; i < categories.length(); i++) {
++                JSONObject category = categories.getJSONObject(i);
++                catalog.categories.put(category.getString("id"), category.getString("name"));
++            }
++            JSONArray items = json.getJSONArray("items");
++            for (int i = 0; i < items.length(); i++) catalog.items.add(new Item(items.getJSONObject(i)));
++        }
++        catch (Exception ignored) {}
++        return catalog;
++    }
++
++    // ---------------------------------------------------------------- verification
++
++    /** Read-only snapshot of the container's Windows directory and HKLM registry. */
++    public static final class Snapshot {
++        final File windowsDir;
++        final File driveC;
++        final Map<String, Map<String, String>> registry;
++        final String registryText;
++        final KeyValueSet wincomponents;
++        final boolean pendingWinComponents;
++
++        Snapshot(Container container) {
++            driveC = new File(container.getRootDir(), ".wine/drive_c");
++            windowsDir = new File(driveC, "windows");
++            File systemReg = new File(container.getRootDir(), ".wine/system.reg");
++            registry = new HashMap<>();
++            registryText = parseRegistry(systemReg, registry);
++            wincomponents = new KeyValueSet(container.getWinComponents());
++            String applied = container.getExtra("wincomponents", "");
++            pendingWinComponents = !container.getWinComponents().equals(applied);
++        }
++    }
++
++    public static Snapshot snapshot(Container container) {
++        return new Snapshot(container);
++    }
++
++    private static String parseRegistry(File file, Map<String, Map<String, String>> out) {
++        StringBuilder text = new StringBuilder();
++        if (!file.isFile()) return "";
++        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
++            String line;
++            Map<String, String> current = null;
++            while ((line = reader.readLine()) != null) {
++                if (line.startsWith("[")) {
++                    int end = line.lastIndexOf(']');
++                    if (end > 0) {
++                        String key = line.substring(1, end).replace("\\\\", "\\").toLowerCase(Locale.ENGLISH);
++                        current = new HashMap<>();
++                        out.put(key, current);
++                    }
++                }
++                else if (current != null && line.startsWith("\"")) {
++                    int eq = line.indexOf("\"=");
++                    if (eq > 0) current.put(line.substring(1, eq).toLowerCase(Locale.ENGLISH), line.substring(eq + 2));
++                    if (line.contains("DisplayName")) text.append(line).append('\n');
++                }
++            }
++        }
++        catch (IOException ignored) {}
++        return text.toString().toLowerCase(Locale.ENGLISH);
++    }
++
++    private static Integer regDword(Snapshot snapshot, String key, String name) {
++        String lower = key.toLowerCase(Locale.ENGLISH);
++        String[] candidates = {lower, lower.replaceFirst("^software\\\\", "software\\\\wow6432node\\\\")};
++        for (String candidate : candidates) {
++            Map<String, String> values = snapshot.registry.get(candidate);
++            if (values == null) continue;
++            String value = values.get(name.toLowerCase(Locale.ENGLISH));
++            if (value != null && value.startsWith("dword:")) {
++                try { return (int)Long.parseLong(value.substring(6), 16); }
++                catch (NumberFormatException ignored) {}
++            }
++        }
++        return null;
++    }
++
++    /** Resolves a path below C:\windows case-insensitively, as Windows would. */
++    private static File resolve(File base, String relative) {
++        File current = base;
++        for (String part : relative.split("/")) {
++            if (part.isEmpty()) continue;
++            File exact = new File(current, part);
++            if (exact.exists()) { current = exact; continue; }
++            File[] children = current.listFiles();
++            File match = null;
++            if (children != null) for (File child : children) if (child.getName().equalsIgnoreCase(part)) { match = child; break; }
++            if (match == null) return null;
++            current = match;
++        }
++        return current;
++    }
++
++    /** True when the file exists and is not one of Wine's builtin or placeholder DLLs. */
++    static boolean isNativeFile(File file) {
++        if (file == null || !file.isFile()) return false;
++        byte[] header = new byte[0x80];
++        try (FileInputStream in = new FileInputStream(file)) {
++            int read = in.read(header);
++            if (read < 0x60) return true;
++        }
++        catch (IOException e) { return false; }
++        String marker = new String(header, 0x40, 0x40, StandardCharsets.ISO_8859_1);
++        return !marker.startsWith("Wine builtin DLL") && !marker.startsWith("Wine placeholder DLL");
++    }
++
++    private static boolean verified(Item item, Snapshot snapshot) {
++        JSONObject verify = item.verify;
++        if (verify == null) return false;
++        JSONArray native_ = verify.optJSONArray("native");
++        if (native_ != null) for (int i = 0; i < native_.length(); i++) {
++            if (!isNativeFile(resolve(snapshot.windowsDir, native_.optString(i)))) return false;
++        }
++        JSONArray files = verify.optJSONArray("files");
++        if (files != null) for (int i = 0; i < files.length(); i++) {
++            if (resolve(snapshot.windowsDir, files.optString(i)) == null) return false;
++        }
++        JSONObject dword = verify.optJSONObject("regDword");
++        if (dword != null) {
++            Integer value = regDword(snapshot, dword.optString("key"), dword.optString("name"));
++            if (value == null || (value & 0xffffffffL) < dword.optLong("min")) return false;
++        }
++        String text = verify.optString("regText", "");
++        if (!text.isEmpty() && !snapshot.registryText.contains(text.toLowerCase(Locale.ENGLISH))) return false;
++        return native_ != null || files != null || dword != null || !text.isEmpty();
++    }
++
++    public static Status status(Context context, Item item, Snapshot snapshot) {
++        if (item.isInfo()) return new Status(State.INFO, item.note);
++        boolean ok = verified(item, snapshot);
++        if (item.isWinComponent()) {
++            boolean enabled = "1".equals(snapshot.wincomponents.get(item.wincomponent));
++            if (enabled && ok) return new Status(State.INSTALLED, null);
++            if (enabled) return new Status(State.PENDING_RESTART, null);
++            if (ok && snapshot.pendingWinComponents) return new Status(State.PENDING_RESTART, null);
++            return new Status(State.NOT_INSTALLED, null);
++        }
++        if (ok) return new Status(State.INSTALLED, null);
++        File statusFile = new File(snapshot.driveC, INSTALL_DIR + "/status/" + item.id + ".txt");
++        if (statusFile.isFile()) {
++            String code = FileUtils.readString(statusFile).trim();
++            return new Status(State.FAILED, code);
++        }
++        return new Status(State.NOT_INSTALLED, null);
++    }
++
++    public static boolean isWinComponentEnabled(Container container, Item item) {
++        return "1".equals(new KeyValueSet(container.getWinComponents()).get(item.wincomponent));
++    }
++
++    /** Updates a bundled component. It is extracted or removed when the container next starts. */
++    public static void setWinComponent(Container container, Item item, boolean enabled) {
++        KeyValueSet set = new KeyValueSet(container.getWinComponents());
++        set.put(item.wincomponent, enabled ? "1" : "0");
++        container.setWinComponents(set.toString());
++        container.saveData();
++    }
++
++    // ---------------------------------------------------------------- cache and downloads
++
++    public static File cacheDir(Context context) {
++        return new File(context.getFilesDir(), "miniexe/dependency-cache");
++    }
++
++    private static File cacheFile(Context context, Item item, Download download) {
++        return new File(cacheDir(context), item.id + "/" + download.file);
++    }
++
++    public static boolean isCached(Context context, Item item, Download download) {
++        File file = cacheFile(context, item, download);
++        File marker = new File(file.getPath() + ".sha256");
++        if (!file.isFile() || !marker.isFile()) return false;
++        if (!download.sha256.equals(FileUtils.readString(marker).trim())) return false;
++        return !download.extractCab || cabFile(file).isFile();
++    }
++
++    public static boolean isCached(Context context, Item item) {
++        for (Download download : item.downloads) if (!isCached(context, item, download)) return false;
++        return true;
++    }
++
++    public static long cachedSize(Context context, Item item) {
++        long total = 0;
++        for (Download download : item.downloads) total += cacheFile(context, item, download).length();
++        return total;
++    }
++
++    public static long cacheSize(Context context) {
++        return directorySize(cacheDir(context));
++    }
++
++    private static long directorySize(File dir) {
++        File[] files = dir.listFiles();
++        long total = 0;
++        if (files != null) for (File file : files) total += file.isDirectory() ? directorySize(file) : file.length();
++        return total;
++    }
++
++    public static void clearCache(Context context) {
++        FileUtils.delete(cacheDir(context));
++    }
++
++    private static File cabFile(File exe) {
++        String path = exe.getPath();
++        int dot = path.lastIndexOf('.');
++        return new File((dot > 0 ? path.substring(0, dot) : path) + ".cab");
++    }
++
++    private static HttpURLConnection open(String url, String method) throws IOException {
++        HttpURLConnection connection = null;
++        String current = url;
++        for (int redirects = 0; redirects < 8; redirects++) {
++            connection = (HttpURLConnection)new URL(current).openConnection();
++            connection.setRequestMethod(method);
++            connection.setInstanceFollowRedirects(false);
++            connection.setConnectTimeout(20000);
++            connection.setReadTimeout(30000);
++            connection.setRequestProperty("User-Agent", "MiniEXE");
++            int code = connection.getResponseCode();
++            if (code >= 300 && code < 400) {
++                String location = connection.getHeaderField("Location");
++                connection.disconnect();
++                if (location == null) throw new IOException("HTTP " + code);
++                current = new URL(new URL(current), location).toString();
++                if (!current.startsWith("https://")) throw new IOException("Refused non-HTTPS redirect");
++                continue;
++            }
++            return connection;
++        }
++        throw new IOException("Too many redirects");
++    }
++
++    /** Download size in bytes, or -1 when the server does not report it. */
++    public static long remoteSize(Download download) {
++        HttpURLConnection connection = null;
++        try {
++            connection = open(download.url, "HEAD");
++            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) return -1;
++            return connection.getContentLengthLong();
++        }
++        catch (Exception e) { return -1; }
++        finally { if (connection != null) connection.disconnect(); }
++    }
++
++    public interface Progress {
++        void update(long done, long total);
++    }
++
++    /** Downloads one file and checks its SHA-256. Returns null on success or an error message. */
++    public static String download(Context context, Item item, Download download, AtomicBoolean cancelled, Progress progress) {
++        File target = cacheFile(context, item, download);
++        File parent = target.getParentFile();
++        if (parent != null && !parent.isDirectory()) parent.mkdirs();
++        File partial = new File(target.getPath() + ".part");
++        HttpURLConnection connection = null;
++        try {
++            connection = open(download.url, "GET");
++            int code = connection.getResponseCode();
++            if (code != HttpURLConnection.HTTP_OK) return download.file + ": HTTP " + code;
++            long total = connection.getContentLengthLong();
++            MessageDigest digest = MessageDigest.getInstance("SHA-256");
++            long done = 0;
++            try (InputStream in = new BufferedInputStream(connection.getInputStream(), 65536);
++                 OutputStream out = new FileOutputStream(partial)) {
++                byte[] buffer = new byte[65536];
++                int read;
++                while ((read = in.read(buffer)) != -1) {
++                    if (cancelled.get()) return context.getString(R.string.deps_cancelled);
++                    out.write(buffer, 0, read);
++                    digest.update(buffer, 0, read);
++                    done += read;
++                    progress.update(done, total);
++                }
++            }
++            String actual = hex(digest.digest());
++            if (!actual.equals(download.sha256)) {
++                partial.delete();
++                return context.getString(R.string.deps_checksum_mismatch, download.file);
++            }
++            if (target.exists()) target.delete();
++            if (!partial.renameTo(target)) return download.file + ": unable to save";
++            if (download.extractCab && !extractEmbeddedCab(target, cabFile(target))) {
++                return context.getString(R.string.deps_no_cabinet, download.file);
++            }
++            FileUtils.writeString(new File(target.getPath() + ".sha256"), download.sha256);
++            return null;
++        }
++        catch (Exception e) {
++            return download.file + ": " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
++        }
++        finally {
++            if (connection != null) connection.disconnect();
++            if (partial.exists() && cancelled.get()) partial.delete();
++        }
++    }
++
++    private static String hex(byte[] bytes) {
++        StringBuilder sb = new StringBuilder();
++        for (byte b : bytes) sb.append(String.format(Locale.ENGLISH, "%02x", b));
++        return sb.toString();
++    }
++
++    /**
++     * Copies the first valid Microsoft Cabinet embedded in a self-extracting EXE into its own
++     * file, so Wine's extrac32 can unpack it. The cabinet data itself (MSZIP/LZX) is not decoded here.
++     */
++    static boolean extractEmbeddedCab(File exe, File out) {
++        try (RandomAccessFile file = new RandomAccessFile(exe, "r")) {
++            long length = file.length();
++            byte[] window = new byte[1 << 20];
++            ByteBuffer header = ByteBuffer.allocate(36).order(ByteOrder.LITTLE_ENDIAN);
++            for (long base = 0; base < length; base += window.length - 36) {
++                file.seek(base);
++                int read = file.read(window);
++                if (read <= 0) break;
++                for (int i = 0; i + 36 <= read; i++) {
++                    if (window[i] != 'M' || window[i + 1] != 'S' || window[i + 2] != 'C' || window[i + 3] != 'F') continue;
++                    header.clear();
++                    header.put(window, i, 36).flip();
++                    int reserved1 = header.getInt(4);
++                    long size = header.getInt(8) & 0xffffffffL;
++                    int reserved2 = header.getInt(12);
++                    int minor = header.get(24), major = header.get(25);
++                    long offset = base + i;
++                    if (reserved1 != 0 || reserved2 != 0 || major != 1 || minor != 3 || size < 36 || offset + size > length) continue;
++                    file.seek(offset);
++                    try (OutputStream output = new FileOutputStream(out)) {
++                        byte[] buffer = new byte[65536];
++                        long remaining = size;
++                        while (remaining > 0) {
++                            int n = file.read(buffer, 0, (int)Math.min(buffer.length, remaining));
++                            if (n <= 0) return false;
++                            output.write(buffer, 0, n);
++                            remaining -= n;
++                        }
++                    }
++                    return true;
++                }
++                if (read < window.length) break;
++            }
++        }
++        catch (IOException ignored) {}
++        return false;
++    }
++
++    // ---------------------------------------------------------------- install script
++
++    /**
++     * Writes C:\miniexe\install.bat for the given installer items (already ordered and cached)
++     * and returns its Unix path. Results go to C:\miniexe\install-log.txt and per-item status
++     * files; the log opens in Notepad when the script finishes.
++     */
++    public static File writeInstallScript(Context context, Container container, Catalog catalog, List<Item> items, boolean monoInstalled) throws IOException {
++        File driveC = new File(container.getRootDir(), ".wine/drive_c");
++        File installDir = new File(driveC, INSTALL_DIR);
++        File statusDir = new File(installDir, "status");
++        if (!statusDir.isDirectory()) statusDir.mkdirs();
++        File link = new File(installDir, "cache");
++        File cache = cacheDir(context);
++        if (!cache.isDirectory()) cache.mkdirs();
++        if (!FileUtils.isSymlink(link) || !cache.getPath().equals(FileUtils.readSymlink(link))) {
++            FileUtils.delete(link);
++            FileUtils.symlink(cache, link);
++        }
++
++        final String log = "C:\\miniexe\\install-log.txt";
++        StringBuilder bat = new StringBuilder();
++        bat.append("@echo off\r\n");
++        bat.append("echo MiniEXE dependency install > ").append(log).append("\r\n");
++        boolean monoPresent = monoInstalled;
++        Item mono = catalog.get("mono");
++        for (Item item : items) {
++            new File(statusDir, item.id + ".txt").delete();
++            String cacheDir = "C:\\miniexe\\cache\\" + item.id;
++            String tmpDir = "C:\\miniexe\\tmp\\" + item.id;
++            bat.append("\r\nrem ---- ").append(item.id).append("\r\n");
++            bat.append("echo [").append(item.id).append("] ").append(ascii(item.name)).append(" >> ").append(log).append("\r\n");
++            bat.append("set MINIEXE_RC=0\r\n");
++            bat.append("if not exist ").append(tmpDir).append(" mkdir ").append(tmpDir).append("\r\n");
++            if (item.removeMono && monoPresent && mono != null && !mono.downloads.isEmpty()) {
++                bat.append("echo   removing Wine Mono >> ").append(log).append("\r\n");
++                bat.append("start /wait msiexec.exe /x C:\\miniexe\\cache\\mono\\").append(mono.downloads.get(0).file).append(" /qn\r\n");
++                monoPresent = false;
++            }
++            if ("mono".equals(item.id)) monoPresent = true;
++            if (!item.winver.isEmpty()) bat.append("reg add \"HKCU\\Software\\Wine\" /v Version /t REG_SZ /d ").append(item.winver).append(" /f >nul\r\n");
++            for (Map.Entry<String, List<String>> entry : item.overrides.entrySet()) {
++                for (String dll : entry.getValue()) {
++                    bat.append("reg add \"HKCU\\Software\\Wine\\DllOverrides\" /v ").append(dll)
++                       .append(" /t REG_SZ /d ").append(entry.getKey()).append(" /f >nul\r\n");
++                }
++            }
++            if (!item.env.isEmpty()) bat.append("set ").append(item.env).append("\r\n");
++            for (String command : item.commands) {
++                String line = command.replace("{cache}", cacheDir).replace("{tmp}", tmpDir);
++                bat.append(line).append("\r\n");
++                bat.append("if errorlevel 1 set MINIEXE_RC=%errorlevel%\r\n");
++            }
++            if (!item.env.isEmpty()) bat.append("set ").append(item.env, 0, item.env.indexOf('=') + 1).append("\r\n");
++            if (!item.winver.isEmpty()) bat.append("reg delete \"HKCU\\Software\\Wine\" /v Version /f >nul 2>nul\r\n");
++            bat.append("echo   exit code %MINIEXE_RC% >> ").append(log).append("\r\n");
++            bat.append("echo %MINIEXE_RC% > C:\\miniexe\\status\\").append(item.id).append(".txt\r\n");
++            bat.append("rmdir /s /q ").append(tmpDir).append(" >nul 2>nul\r\n");
++        }
++        bat.append("\r\necho. >> ").append(log).append("\r\n");
++        bat.append("echo Finished. Return to MiniEXE and open Dependencies to see verified status. >> ").append(log).append("\r\n");
++        bat.append("start notepad.exe ").append(log).append("\r\n");
++
++        File script = new File(installDir, "install.bat");
++        FileUtils.write(script, bat.toString().getBytes(StandardCharsets.US_ASCII));
++        return script;
++    }
++
++    private static String ascii(String text) {
++        return text.replaceAll("[^ -~]", "-").replaceAll("[<>|&^%]", " ");
++    }
++
++    /** Runs the script in the container's running session, or starts a session for it. */
++    public static void launch(Activity activity, Container container, File script) {
++        if (XServerDisplayActivity.tryLaunchInSession(activity, container.id, script.getPath(), false)) return;
++        Intent intent = new Intent(activity, XServerDisplayActivity.class);
++        intent.putExtra("container_id", container.id);
++        intent.putExtra("exec_path", script.getPath());
++        activity.startActivity(intent);
++    }
++}
 diff --git a/app/src/main/java/com/winlator/InstalledProgramsFragment.java b/app/src/main/java/com/winlator/InstalledProgramsFragment.java
 new file mode 100644
 index 0000000..6db1839
@@ -385,10 +1996,10 @@ index dd126b1..fbe3259 100644
 +}
 diff --git a/app/src/main/java/com/winlator/MiniHomeFragment.java b/app/src/main/java/com/winlator/MiniHomeFragment.java
 new file mode 100644
-index 0000000..9b7fd47
+index 0000000..ce4a632
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/MiniHomeFragment.java
-@@ -0,0 +1,213 @@
+@@ -0,0 +1,219 @@
 +package com.winlator;
 +
 +import android.os.Bundle;
@@ -438,6 +2049,11 @@ index 0000000..9b7fd47
 +    public void onResume() {
 +        super.onResume();
 +        requireActivity().setTitle(R.string.app_name);
++        if (!PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean(DependencyManager.PROMPTED_KEY, false)
++                && com.winlator.xenvironment.RootFS.find(requireContext()).isValid()) {
++            ((MainActivity)requireActivity()).showFragment(new DependenciesFragment(true));
++            return;
++        }
 +        populate();
 +    }
 +
@@ -474,6 +2090,7 @@ index 0000000..9b7fd47
 +        button(getString(R.string.installed_programs), () -> activity.showFragment(new InstalledProgramsFragment()));
 +        button(getString(R.string.file_explorer), activity::openDefaultFiles);
 +        button(getString(R.string.running_apps), () -> XServerDisplayActivity.showRunningSession(activity));
++        button(getString(R.string.dependencies), () -> activity.showFragment(new DependenciesFragment()));
 +        button(getString(R.string.settings), () -> activity.showFragment(new MiniSettingsFragment()));
 +
 +        addContainerSection(activity);
@@ -604,10 +2221,10 @@ index 0000000..9b7fd47
 +}
 diff --git a/app/src/main/java/com/winlator/MiniSettingsFragment.java b/app/src/main/java/com/winlator/MiniSettingsFragment.java
 new file mode 100644
-index 0000000..f961c31
+index 0000000..0af76f4
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/MiniSettingsFragment.java
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,84 @@
 +package com.winlator;
 +
 +import android.os.Bundle;
@@ -679,6 +2296,12 @@ index 0000000..f961c31
 +            ((MainActivity)requireActivity()).showFragment(new SettingsFragment());
 +        });
 +        content.addView(advancedSettings, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++
++        Button dependencies = new Button(requireContext());
++        dependencies.setAllCaps(false);
++        dependencies.setText(R.string.dependencies);
++        dependencies.setOnClickListener(v -> ((MainActivity)requireActivity()).showFragment(new DependenciesFragment()));
++        content.addView(dependencies, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 +
 +        TextView logs = new TextView(requireContext());
 +        logs.setText(R.string.log_saved_to);
@@ -1709,10 +3332,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..95943bb 100644
+index 61fcd5e..11173e0 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,28 @@
+@@ -1,6 +1,57 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -1730,6 +3353,35 @@ index 61fcd5e..95943bb 100644
 +    <string name="program_ended_early">The Windows session ended early (exit code %1$d). Check the log for details.</string>
 +    <string name="log_saved_to">Log: /sdcard/Download/MiniEXE/logs.txt</string>
 +    <string name="log_save_failed">Unable to save the log in Downloads.</string>
++    <string name="dependencies">Dependencies</string>
++    <string name="deps_intro">Optional Windows runtimes and libraries. None are required: skip this to run simple EXEs, and come back any time from the home screen or Settings. Downloads come from Microsoft, WineHQ, or the winetricks-listed mirrors and are checked against pinned SHA-256 checksums.</string>
++    <string name="deps_target_container">Installs into container: %1$s</string>
++    <string name="deps_no_container">A default container will be created when you install something.</string>
++    <string name="deps_session_running">This container is running. Installers run in the open session; bundled component changes apply after the session is closed and reopened.</string>
++    <string name="deps_install_selected">Install selected</string>
++    <string name="deps_clear_cache">Clear downloaded installers</string>
++    <string name="deps_clear_cache_size">Clear downloaded installers (%1$s)</string>
++    <string name="deps_installed">Installed (verified)</string>
++    <string name="deps_pending_restart">Selected, applied when the container next starts</string>
++    <string name="deps_failed">Not installed: the last install attempt ended with code %1$s</string>
++    <string name="deps_replaced">Covered by a newer installed version</string>
++    <string name="deps_bundled">Bundled with MiniEXE, no download</string>
++    <string name="deps_not_installed">Not installed</string>
++    <string name="deps_cached">Downloaded (%1$s)</string>
++    <string name="deps_size_checking">Checking download size…</string>
++    <string name="deps_size_unknown">Download size unknown</string>
++    <string name="deps_download_size">Download: %1$s</string>
++    <string name="deps_components_saved">Saved. Bundled components are applied when the container next starts.</string>
++    <string name="deps_nothing_selected">Nothing new is selected.</string>
++    <string name="deps_mono_cache_missing">.NET was skipped because Wine Mono must be removed first and its installer could not be downloaded.</string>
++    <string name="deps_download_errors">Some downloads failed</string>
++    <string name="deps_install_remaining">Install the rest</string>
++    <string name="deps_downloading">Downloading</string>
++    <string name="deps_cancelled">Cancelled</string>
++    <string name="deps_checksum_mismatch">%1$s does not match its expected SHA-256 checksum and was discarded.</string>
++    <string name="deps_no_cabinet">%1$s does not contain the expected cabinet archive.</string>
++    <string name="skip">Skip</string>
++    <string name="done">Done</string>
 +    <string name="container_settings">Container Settings</string>
 +    <string name="switch_container">Switch Container</string>
 +    <string name="no_container_yet">No container yet. One is created the first time you open Run EXE, File Explorer, or Container Settings.</string>
@@ -1742,7 +3394,7 @@ index 61fcd5e..95943bb 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +373,10 @@
+@@ -351,10 +402,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
