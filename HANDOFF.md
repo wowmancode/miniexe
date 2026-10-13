@@ -197,6 +197,15 @@ script reports DONE, and Dependencies has "View last install log" with
 Copy (Android clipboard) and Share. `LogView.openDownloadsFile` generalises
 the MediaStore writer.
 
+Seventh report: the fallback found 0 valid cabinets in
+`dotNetFx40_Full_x86_x64.exe` (the cabinet found earlier was a false match
+that `extrac32` rejected), so the .NET 4 payload is not a plain embedded
+MSCF cabinet. The install log now includes the PE header (machine, flags,
+image base/size, relocations, CLR and certificate sizes) and section table
+of the installer, plus every raw `MSCF` signature with its header fields, to
+identify the real container format. Cabinet output moved to `.cabs2/` so
+the rescan is not skipped.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft

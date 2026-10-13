@@ -1227,10 +1227,10 @@ index 0000000..1204fb3
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..6041ba7
+index 0000000..b9a3fde
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,847 @@
+@@ -0,0 +1,917 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1659,7 +1659,9 @@ index 0000000..6041ba7
 +            List<CabInfo> cabs = scanCabs(file);
 +            StringBuilder info = new StringBuilder();
 +            StringBuilder roots = new StringBuilder();
++            info.append(peSummary(file));
 +            info.append(cabs.size()).append(" embedded cabinet(s) in ").append(file.getName()).append('\n');
++            if (cabs.isEmpty()) info.append(mscfCandidates(file));
 +            String expectedName = null;
 +            int rootIndex = 0;
 +            for (CabInfo cab : cabs) {
@@ -1680,7 +1682,7 @@ index 0000000..6041ba7
 +    }
 +
 +    private static File cabsDir(File download) {
-+        return new File(download.getPath() + ".cabs");
++        return new File(download.getPath() + ".cabs2");
 +    }
 +
 +    static final class CabInfo {
@@ -1768,6 +1770,74 @@ index 0000000..6041ba7
 +        }
 +        catch (IOException ignored) {}
 +        return result;
++    }
++
++    /** One-line-per-fact summary of a PE file's headers and sections, for the install log. */
++    static String peSummary(File source) {
++        StringBuilder out = new StringBuilder();
++        try (RandomAccessFile file = new RandomAccessFile(source, "r")) {
++            ByteBuffer b = ByteBuffer.allocate(4096).order(ByteOrder.LITTLE_ENDIAN);
++            file.readFully(b.array(), 0, (int)Math.min(4096, file.length()));
++            int pe = b.getInt(0x3c);
++            if (b.getShort(0) != 0x5a4d || pe <= 0 || pe > 3800 || b.getInt(pe) != 0x4550) return "not a PE file\n";
++            int machine = b.getShort(pe + 4) & 0xffff, sections = b.getShort(pe + 6) & 0xffff;
++            int optSize = b.getShort(pe + 20) & 0xffff, characteristics = b.getShort(pe + 22) & 0xffff;
++            int opt = pe + 24, magic = b.getShort(opt) & 0xffff;
++            boolean pe32plus = magic == 0x20b;
++            long imageBase = pe32plus ? b.getLong(opt + 24) : (b.getInt(opt + 28) & 0xffffffffL);
++            long sizeOfImage = b.getInt(opt + 56) & 0xffffffffL;
++            int subsystem = b.getShort(opt + 68) & 0xffff, dllChars = b.getShort(opt + 70) & 0xffff;
++            int dirs = opt + (pe32plus ? 112 : 96);
++            long relocSize = b.getInt(dirs + 5 * 8 + 4) & 0xffffffffL;
++            long clrSize = b.getInt(dirs + 14 * 8 + 4) & 0xffffffffL;
++            long securitySize = b.getInt(dirs + 4 * 8 + 4) & 0xffffffffL;
++            out.append(String.format(Locale.ENGLISH,
++                    "PE machine=%04x magic=%x chars=%04x dllchars=%04x base=%x image=%d subsystem=%d reloc=%d clr=%d cert=%d len=%d\n",
++                    machine, magic, characteristics, dllChars, imageBase, sizeOfImage, subsystem, relocSize, clrSize, securitySize, file.length()));
++            int sec = opt + optSize;
++            for (int i = 0; i < sections && sec + 40 <= 4096; i++, sec += 40) {
++                byte[] name = new byte[8];
++                for (int k = 0; k < 8; k++) name[k] = b.get(sec + k);
++                String n = new String(name, StandardCharsets.ISO_8859_1).replace("\0", "");
++                long vsize = b.getInt(sec + 8) & 0xffffffffL, rawSize = b.getInt(sec + 16) & 0xffffffffL, rawPtr = b.getInt(sec + 20) & 0xffffffffL;
++                out.append(String.format(Locale.ENGLISH, "  section %-8s vsize=%d raw=%d at %d\n", n, vsize, rawSize, rawPtr));
++            }
++        }
++        catch (Exception e) {
++            out.append("PE parse failed: ").append(e).append('\n');
++        }
++        return out.toString();
++    }
++
++    /** Lists raw "MSCF" signatures with their header fields when no valid cabinet was accepted. */
++    static String mscfCandidates(File source) {
++        StringBuilder out = new StringBuilder();
++        int count = 0;
++        try (RandomAccessFile file = new RandomAccessFile(source, "r")) {
++            long length = file.length();
++            byte[] window = new byte[1 << 20];
++            ByteBuffer h = ByteBuffer.allocate(36).order(ByteOrder.LITTLE_ENDIAN);
++            for (long base = 0; base < length && count < 20; base += window.length - 36) {
++                file.seek(base);
++                int read = file.read(window);
++                if (read <= 0) break;
++                for (int i = 0; i + 36 <= read && count < 20; i++) {
++                    if (window[i] != 'M' || window[i + 1] != 'S' || window[i + 2] != 'C' || window[i + 3] != 'F') continue;
++                    h.clear();
++                    h.put(window, i, 36).flip();
++                    out.append(String.format(Locale.ENGLISH, "  MSCF at %d: r1=%d size=%d r2=%d coffFiles=%d r3=%d ver=%d.%d folders=%d files=%d flags=%d\n",
++                            base + i, h.getInt(4), h.getInt(8) & 0xffffffffL, h.getInt(12), h.getInt(16), h.getInt(20),
++                            h.get(25), h.get(24), h.getShort(26) & 0xffff, h.getShort(28) & 0xffff, h.getShort(30) & 0xffff));
++                    count++;
++                }
++                if (read < window.length) break;
++            }
++        }
++        catch (IOException e) {
++            out.append("  scan failed: ").append(e).append('\n');
++        }
++        if (count == 0) out.append("  no MSCF signature anywhere in the file\n");
++        return out.toString();
 +    }
 +
 +    private static boolean copyRange(File source, long offset, long size, File out) {
@@ -2002,12 +2072,12 @@ index 0000000..6041ba7
 +            if (command.startsWith("@cabs ")) {
 +                // "@cabs <download file>": log the cabinet summary and unpack each root cabinet.
 +                String fileName = command.substring(6).trim();
-+                File cabs = new File(installDir, "cache/" + item.id + "/" + fileName + ".cabs");
++                File cabs = new File(installDir, "cache/" + item.id + "/" + fileName + ".cabs2");
 +                for (String infoLine : FileUtils.readLines(new File(cabs, "info.txt"))) {
 +                    bat.append("echo   ").append(ascii(infoLine)).append(" >> ").append(log).append("\r\n");
 +                }
 +                for (String root : FileUtils.readLines(new File(cabs, "roots.txt"), true)) {
-+                    expanded.add("extrac32.exe /Y /E /L {tmp} {cache}\\" + fileName + ".cabs\\" + root.trim());
++                    expanded.add("extrac32.exe /Y /E /L {tmp} {cache}\\" + fileName + ".cabs2\\" + root.trim());
 +                }
 +                expanded.add("dir /b /s {tmp} >> " + log);
 +            }
