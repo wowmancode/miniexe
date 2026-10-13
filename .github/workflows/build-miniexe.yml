@@ -66,24 +66,18 @@ jobs:
           sha256sum "$apk"
           du -h "$apk"
 
-      - name: Upload MiniEXE APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MiniEXE-arm64-debug
-          path: app/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Publish APK to GitHub Releases
+      - name: Publish APK as the "latest" release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          short=$(git rev-parse --short HEAD)
-          tag="build-$(date -u +%Y%m%d-%H%M)-$short"
-          apk="$RUNNER_TEMP/MiniEXE-$short-arm64-debug.apk"
+          apk="$RUNNER_TEMP/MiniEXE-arm64-debug.apk"
           cp app/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          short=$(git rev-parse --short HEAD)
           subject=$(git log -1 --pretty=%s)
-          notes="Automatic debug build of ${GITHUB_SHA} (${subject}). Unsigned debug APK for ARM64; not device-tested."
-          gh release create "$tag" "$apk" --target "$GITHUB_SHA" --title "MiniEXE build $short" --notes "$notes" --latest
+          notes="Debug build of ${GITHUB_SHA} (${subject}). Unsigned ARM64 debug APK; replaced on every push to main."
+          # Exactly one release: remove the previous one and its tag, then publish this build.
+          gh release delete latest --yes --cleanup-tag || true
+          git push --delete origin latest 2>/dev/null || true
+          gh release create latest "$apk" --target "$GITHUB_SHA" --title "MiniEXE latest ($short)" --notes "$notes" --latest

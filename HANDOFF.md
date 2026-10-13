@@ -238,10 +238,31 @@ also has Processes. Both open Winlator's existing `TaskManagerDialog`
 battery). The truncated-stub probe was removed; the fallback keeps the
 in-prefix copy and `/x` extraction.
 
-**Releases:** pushes to `main` now also publish the APK to GitHub Releases
-(`build-YYYYMMDD-HHMM-<sha>`, marked latest) via `gh release create` in
-the workflow (`permissions: contents: write`). The one-day artifact upload
-remains.
+Eleventh report — **.NET 4.0 installed.** The fallback's copy of the
+installer stored inside drive C: ran to completion (extracted `Setup.exe`,
+`msiexec`, `lodctr`, `regtlibv12`, `ngen`/`mscorsvw`), while the identical
+file reached through `C:\miniexe\cache` (a symlink to
+`files/miniexe/dependency-cache`, outside the rootfs) never starts.
+Root cause of that difference is not established; VC++ installers do start
+through the symlink. Every install now copies the item's cached files to
+`C:\miniexe\stage\<id>` first, runs from there, and removes the copy.
+The .NET probes, fallback and diagnostic tracing were removed.
+
+**Windows version.** Wine uses HKCU\Software\Wine "Version" (winecfg)
+when present and only otherwise the HKLM NT CurrentVersion keys (what
+Winlator's container setting writes), and registry files edited while a
+container runs are overwritten by wineserver on exit. The install script
+previously *deleted* the "Version" value after .NET items, wiping winecfg
+choices; it now restores the value it found. `WindowsVersion.java` sets
+both places (directly when stopped, via a `reg.exe` batch inside the
+session when running), the home screen shows "Windows version: …" with a
+picker, and Winlator's container editor now uses the same code.
+
+**Releases:** each push to `main` replaces the single GitHub release
+`latest` (tag and release deleted, then recreated at the new commit) with
+`MiniEXE-arm64-debug.apk`; stable link:
+<https://github.com/wowmancode/miniexe/releases/latest/download/MiniEXE-arm64-debug.apk>.
+Actions artifact uploads were removed.
 
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under

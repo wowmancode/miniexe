@@ -35,10 +35,10 @@ index 1262c0d..4bfbb75 100644
  
 diff --git a/app/src/main/assets/miniexe/dependencies.json b/app/src/main/assets/miniexe/dependencies.json
 new file mode 100644
-index 0000000..cb86c2b
+index 0000000..bd2d6c5
 --- /dev/null
 +++ b/app/src/main/assets/miniexe/dependencies.json
-@@ -0,0 +1,626 @@
+@@ -0,0 +1,597 @@
 +{
 + "categories": [
 +  {
@@ -123,12 +123,7 @@ index 0000000..cb86c2b
 +     "name": "SP",
 +     "min": 1
 +    }
-+   },
-+   "debug": "+process",
-+   "diagEnv": [
-+    "BOX64_LOG=1",
-+    "BOX64_SHOWSEGV=1"
-+   ]
++   }
 +  },
 +  {
 +   "id": "dotnet40",
@@ -168,18 +163,6 @@ index 0000000..cb86c2b
 +     "min": 1
 +    }
 +   },
-+   "debug": "+process",
-+   "fallbackCommands": [
-+    "copy /Y {cache}\\dotNetFx40_Full_x86_x64.exe {tmp}\\setupcopy.exe",
-+    "{tmp}\\setupcopy.exe /passive /norestart",
-+    "if errorlevel 1 ({cache}\\dotNetFx40_Full_x86_x64.exe /x:{tmp}\\x /q)",
-+    "if exist {tmp}\\x\\Setup.exe ({tmp}\\x\\Setup.exe /passive /norestart) else (cmd.exe /c exit 0)"
-+   ],
-+   "diagEnv": [
-+    "BOX64_LOG=1",
-+    "BOX64_SHOWSEGV=1",
-+    "BOX64_DLSYM_ERROR=1"
-+   ],
 +   "note": "Shows the installer's own progress window. Under emulation this can take 15-30 minutes."
 +  },
 +  {
@@ -187,7 +170,7 @@ index 0000000..cb86c2b
 +   "name": "Microsoft .NET Framework 4.5",
 +   "category": "runtime",
 +   "type": "installer",
-+   "note": "Replaces .NET 4.0 in this container (4.0 is installed first, then upgraded). Shows the installer's own progress window. Under emulation this can take 15-30 minutes.",
++   "note": "Shows the installer's own progress window. Under emulation this can take 15-30 minutes. Replaces .NET 4.0 in this container (4.0 is installed first, then upgraded).",
 +   "requires": [
 +    "dotnet40"
 +   ],
@@ -223,19 +206,7 @@ index 0000000..cb86c2b
 +     "name": "Release",
 +     "min": 378389
 +    }
-+   },
-+   "debug": "+process",
-+   "fallbackCommands": [
-+    "copy /Y {cache}\\dotnetfx45_full_x86_x64.exe {tmp}\\setupcopy.exe",
-+    "{tmp}\\setupcopy.exe /passive /norestart",
-+    "if errorlevel 1 ({cache}\\dotnetfx45_full_x86_x64.exe /x:{tmp}\\x /q)",
-+    "if exist {tmp}\\x\\Setup.exe ({tmp}\\x\\Setup.exe /passive /norestart) else (cmd.exe /c exit 0)"
-+   ],
-+   "diagEnv": [
-+    "BOX64_LOG=1",
-+    "BOX64_SHOWSEGV=1",
-+    "BOX64_DLSYM_ERROR=1"
-+   ]
++   }
 +  },
 +  {
 +   "id": "vcrun2005",
@@ -726,6 +697,19 @@ index 2314314..7e37b9c 100644
 -#endif
 \ No newline at end of file
 +#endif
+diff --git a/app/src/main/java/com/winlator/ContainerDetailFragment.java b/app/src/main/java/com/winlator/ContainerDetailFragment.java
+index 8b8cd46..42dd672 100644
+--- a/app/src/main/java/com/winlator/ContainerDetailFragment.java
++++ b/app/src/main/java/com/winlator/ContainerDetailFragment.java
+@@ -290,7 +290,7 @@ public class ContainerDetailFragment extends Fragment {
+         int oldPosition = (byte)sWinVersion.getTag();
+         if (oldPosition != -1) {
+             int newPosition = sWinVersion.getSelectedItemPosition();
+-            if (oldPosition != newPosition) WineUtils.setWinVersion(container, newPosition);
++            if (oldPosition != newPosition) WindowsVersion.apply(getActivity(), container, newPosition);
+         }
+     }
+ 
 diff --git a/app/src/main/java/com/winlator/ContainerFileManagerFragment.java b/app/src/main/java/com/winlator/ContainerFileManagerFragment.java
 index 872621b..cd6a91a 100644
 --- a/app/src/main/java/com/winlator/ContainerFileManagerFragment.java
@@ -1230,10 +1214,10 @@ index 0000000..1204fb3
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..1bbf03d
+index 0000000..6d61cef
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,925 @@
+@@ -0,0 +1,938 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -2012,10 +1996,14 @@ index 0000000..1bbf03d
 +        bat.append("echo MiniEXE dependency install > ").append(log).append("\r\n");
 +        bat.append("set MINIEXE_WINEDEBUG=%WINEDEBUG%\r\n");
 +        boolean monoPresent = monoInstalled;
++        String savedWinver = WindowsVersion.readWineVersionValue(container);
 +        Item mono = catalog.get("mono");
 +        for (Item item : items) {
 +            new File(statusDir, item.id + ".txt").delete();
-+            String cacheDir = "C:\\miniexe\\cache\\" + item.id;
++            // Installers run from a copy inside the prefix: Wine could not start the .NET 4 stub
++            // through the cache symlink (it lives outside the rootfs), while the same file copied
++            // into drive C: runs normally.
++            String cacheDir = "C:\\miniexe\\stage\\" + item.id;
 +            String tmpDir = "C:\\miniexe\\tmp\\" + item.id;
 +            bat.append("\r\nrem ---- ").append(item.id).append("\r\n");
 +            step++;
@@ -2023,6 +2011,10 @@ index 0000000..1bbf03d
 +            bat.append("echo [").append(item.id).append("] ").append(ascii(item.name)).append(" >> ").append(log).append("\r\n");
 +            bat.append("set MINIEXE_RC=0\r\n");
 +            bat.append("if not exist ").append(tmpDir).append(" mkdir ").append(tmpDir).append("\r\n");
++            if (!item.downloads.isEmpty()) {
++                bat.append("if not exist ").append(cacheDir).append(" mkdir ").append(cacheDir).append("\r\n");
++                bat.append("copy /Y C:\\miniexe\\cache\\").append(item.id).append("\\*.* ").append(cacheDir).append("\\ >nul\r\n");
++            }
 +            if (item.removeMono && monoPresent && mono != null && !mono.downloads.isEmpty()) {
 +                bat.append("echo   removing Wine Mono >> ").append(log).append("\r\n");
 +                bat.append("msiexec.exe /x C:\\miniexe\\cache\\mono\\").append(mono.downloads.get(0).file).append(" /qn\r\n");
@@ -2046,10 +2038,15 @@ index 0000000..1bbf03d
 +                bat.append(":miniexe_ok_").append(item.id).append("\r\n");
 +            }
 +            if (!item.env.isEmpty()) bat.append("set ").append(item.env, 0, item.env.indexOf('=') + 1).append("\r\n");
-+            if (!item.winver.isEmpty()) bat.append("reg delete \"HKCU\\Software\\Wine\" /v Version /f >nul 2>nul\r\n");
++            if (!item.winver.isEmpty()) {
++                // Restore the user's own Windows version setting instead of deleting it.
++                if (savedWinver != null) bat.append("reg add \"HKCU\\Software\\Wine\" /v Version /t REG_SZ /d ").append(savedWinver).append(" /f >nul\r\n");
++                else bat.append("reg delete \"HKCU\\Software\\Wine\" /v Version /f >nul 2>nul\r\n");
++            }
 +            bat.append("echo   exit code %MINIEXE_RC% >> ").append(log).append("\r\n");
 +            bat.append("echo %MINIEXE_RC% > C:\\miniexe\\status\\").append(item.id).append(".txt\r\n");
 +            bat.append("rmdir /s /q ").append(tmpDir).append(" >nul 2>nul\r\n");
++            if (!item.downloads.isEmpty()) bat.append("rmdir /s /q ").append(cacheDir).append(" >nul 2>nul\r\n");
 +        }
 +        // Keep installer logs (e.g. .NET setup's dd_*.txt and HTML report) where the user can reach them:
 +        // C:\miniexe\setup-logs, and D:\MiniEXE\setup-logs when D: is the default Downloads drive.
@@ -2423,10 +2420,10 @@ index dd126b1..fbe3259 100644
 +}
 diff --git a/app/src/main/java/com/winlator/MiniHomeFragment.java b/app/src/main/java/com/winlator/MiniHomeFragment.java
 new file mode 100644
-index 0000000..ce4a632
+index 0000000..2661e64
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/MiniHomeFragment.java
-@@ -0,0 +1,219 @@
+@@ -0,0 +1,237 @@
 +package com.winlator;
 +
 +import android.os.Bundle;
@@ -2591,6 +2588,24 @@ index 0000000..ce4a632
 +        }
 +        content.addView(summary);
 +
++        if (container != null) {
++            final Container target = container;
++            button(getString(R.string.windows_version_button, WindowsVersion.describe(target)), () -> {
++                com.winlator.win32.WinVersions.WinVersion[] versions = com.winlator.win32.WinVersions.getWinVersions();
++                String[] names = new String[versions.length];
++                for (int i = 0; i < versions.length; i++) names[i] = versions[i].description;
++                new AlertDialog.Builder(requireContext())
++                        .setTitle(R.string.windows_version)
++                        .setSingleChoiceItems(names, WindowsVersion.currentIndex(target), (dialog, which) -> {
++                            dialog.dismiss();
++                            boolean live = WindowsVersion.apply(requireActivity(), target, which);
++                            com.winlator.core.AppUtils.showToast(requireContext(), live ? R.string.windows_version_applied_live : R.string.windows_version_applied);
++                            populate();
++                        })
++                        .setNegativeButton(android.R.string.cancel, null)
++                        .show();
++            });
++        }
 +        button(getString(R.string.container_settings), activity::openContainerSettings);
 +
 +        ArrayList<Container> containers = manager.getContainers();
@@ -2772,6 +2787,117 @@ index ca3c83b..1c55ff9 100644
              }
          }
      }
+diff --git a/app/src/main/java/com/winlator/WindowsVersion.java b/app/src/main/java/com/winlator/WindowsVersion.java
+new file mode 100644
+index 0000000..ae57d03
+--- /dev/null
++++ b/app/src/main/java/com/winlator/WindowsVersion.java
+@@ -0,0 +1,105 @@
++package com.winlator;
++
++import android.app.Activity;
++
++import com.winlator.container.Container;
++import com.winlator.core.FileUtils;
++import com.winlator.core.WineRegistryEditor;
++import com.winlator.core.WineUtils;
++import com.winlator.win32.WinVersions;
++
++import java.io.File;
++import java.nio.charset.StandardCharsets;
++
++/**
++ * Container-wide Windows version, as Wine actually decides it.
++ *
++ * Wine takes the version from HKCU\Software\Wine "Version" (what winecfg writes) when that value
++ * exists, and only otherwise from HKLM\...\Windows NT\CurrentVersion (what Winlator's container
++ * setting writes). A leftover "Version" value therefore silently overrides Winlator's setting, and
++ * registry files edited while the container is running are overwritten by wineserver on exit.
++ * This class sets both places, and goes through reg.exe inside the session when it is running.
++ */
++public final class WindowsVersion {
++    private static final String WINE_KEY = "Software\\Wine";
++    private static final String NT_KEY = "Software\\Microsoft\\Windows NT\\CurrentVersion";
++
++    private WindowsVersion() {}
++
++    /** The HKCU\Software\Wine "Version" value, or null when not set. */
++    public static String readWineVersionValue(Container container) {
++        File userReg = new File(container.getRootDir(), ".wine/user.reg");
++        if (!userReg.isFile()) return null;
++        try (WineRegistryEditor editor = new WineRegistryEditor(userReg)) {
++            editor.setCreateKeyIfNotExist(false);
++            String value = editor.getStringValue(WINE_KEY, "Version", null);
++            return value == null || value.isEmpty() ? null : value;
++        }
++    }
++
++    /** Index into {@link WinVersions#getWinVersions()} of the version Wine will report. */
++    public static int currentIndex(Container container) {
++        WinVersions.WinVersion[] versions = WinVersions.getWinVersions();
++        String value = readWineVersionValue(container);
++        if (value != null) {
++            for (int i = 0; i < versions.length; i++) if (versions[i].version.equalsIgnoreCase(value)) return i;
++        }
++        File systemReg = new File(container.getRootDir(), ".wine/system.reg");
++        if (systemReg.isFile()) {
++            try (WineRegistryEditor editor = new WineRegistryEditor(systemReg)) {
++                editor.setCreateKeyIfNotExist(false);
++                String build = editor.getStringValue(NT_KEY, "CurrentBuildNumber", "");
++                String product = editor.getStringValue(NT_KEY, "ProductName", "");
++                for (int i = 0; i < versions.length; i++) {
++                    if (product.equalsIgnoreCase("Microsoft " + versions[i].description)) return i;
++                }
++                for (int i = 0; i < versions.length; i++) {
++                    if (String.valueOf(versions[i].buildNumber).equals(build)) return i;
++                }
++            }
++        }
++        for (int i = 0; i < versions.length; i++) if (versions[i].version.equals(WinVersions.DEFAULT_VERSION)) return i;
++        return 0;
++    }
++
++    public static String describe(Container container) {
++        return WinVersions.getWinVersions()[currentIndex(container)].description;
++    }
++
++    /** Applies a version to the container. Returns true when it went through the running session. */
++    public static boolean apply(Activity activity, Container container, int index) {
++        WinVersions.WinVersion version = WinVersions.getWinVersions()[index];
++        if (XServerDisplayActivity.getActiveContainerId() == container.id) {
++            File script = new File(container.getRootDir(), ".wine/drive_c/miniexe/winver.bat");
++            File parent = script.getParentFile();
++            if (parent != null && !parent.isDirectory()) parent.mkdirs();
++            FileUtils.write(script, buildScript(version).getBytes(StandardCharsets.US_ASCII));
++            XServerDisplayActivity.tryLaunchInSession(activity, container.id, script.getPath(), false);
++            return true;
++        }
++        File userReg = new File(container.getRootDir(), ".wine/user.reg");
++        try (WineRegistryEditor editor = new WineRegistryEditor(userReg)) {
++            editor.setStringValue(WINE_KEY, "Version", version.version);
++        }
++        WineUtils.setWinVersion(container, index);
++        return false;
++    }
++
++    private static String buildScript(WinVersions.WinVersion version) {
++        String currentVersion = version.currentVersion != null ? version.currentVersion : version.majorVersion + "." + version.minorVersion;
++        String build = String.valueOf(version.buildNumber);
++        StringBuilder bat = new StringBuilder("@echo off\r\n");
++        bat.append("reg add \"HKCU\\Software\\Wine\" /v Version /t REG_SZ /d ").append(version.version).append(" /f >nul\r\n");
++        for (String root : new String[]{"HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion", "HKLM\\Software\\Wow6432Node\\Microsoft\\Windows NT\\CurrentVersion"}) {
++            String key = "reg add \"" + root + "\" /f /v ";
++            bat.append(key).append("CurrentVersion /t REG_SZ /d ").append(currentVersion).append(" >nul\r\n");
++            bat.append(key).append("CurrentMajorVersionNumber /t REG_DWORD /d ").append(version.majorVersion).append(" >nul\r\n");
++            bat.append(key).append("CurrentMinorVersionNumber /t REG_DWORD /d ").append(version.minorVersion).append(" >nul\r\n");
++            bat.append(key).append("CurrentBuild /t REG_SZ /d ").append(build).append(" >nul\r\n");
++            bat.append(key).append("CurrentBuildNumber /t REG_SZ /d ").append(build).append(" >nul\r\n");
++            bat.append(key).append("CSDVersion /t REG_SZ /d \"").append(version.csdVersion).append("\" >nul\r\n");
++            bat.append(key).append("ProductName /t REG_SZ /d \"Microsoft ").append(version.description).append("\" >nul\r\n");
++        }
++        return bat.toString();
++    }
++}
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 index 53fb456..0fdf5eb 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
@@ -3966,10 +4092,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..62a80d4 100644
+index 61fcd5e..23346b7 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,67 @@
+@@ -1,6 +1,71 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -4026,6 +4152,10 @@ index 61fcd5e..62a80d4 100644
 +    <string name="deps_copy">Copy</string>
 +    <string name="deps_copied">Copied to clipboard</string>
 +    <string name="deps_share">Share</string>
++    <string name="windows_version">Windows version</string>
++    <string name="windows_version_button">Windows version: %1$s</string>
++    <string name="windows_version_applied">Windows version changed. It applies to programs started from now on.</string>
++    <string name="windows_version_applied_live">Windows version changed in the running session. Restart the program to see it.</string>
 +    <string name="container_settings">Container Settings</string>
 +    <string name="switch_container">Switch Container</string>
 +    <string name="no_container_yet">No container yet. One is created the first time you open Run EXE, File Explorer, or Container Settings.</string>
@@ -4038,7 +4168,7 @@ index 61fcd5e..62a80d4 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +412,10 @@
+@@ -351,10 +416,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
