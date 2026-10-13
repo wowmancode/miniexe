@@ -613,15 +613,16 @@ index 0000000..f961c31
 +    }
 +}
 diff --git a/app/src/main/java/com/winlator/SettingsFragment.java b/app/src/main/java/com/winlator/SettingsFragment.java
-index 3bb2d01..7e24b3f 100644
+index 3bb2d01..ce50686 100644
 --- a/app/src/main/java/com/winlator/SettingsFragment.java
 +++ b/app/src/main/java/com/winlator/SettingsFragment.java
-@@ -184,11 +184,12 @@ public class SettingsFragment extends Fragment {
+@@ -184,11 +184,13 @@ public class SettingsFragment extends Fragment {
          sBox64Logs.setSelection(preferences.getInt("box64_logs", 0));
  
          final CheckBox cbSaveLogsToFile = view.findViewById(R.id.CBSaveLogsToFile);
 -        cbSaveLogsToFile.setChecked(preferences.getBoolean("save_logs_to_file", false));
-+        cbSaveLogsToFile.setChecked(preferences.getBoolean("save_logs_to_file", true));
++        cbSaveLogsToFile.setChecked(true);
++        cbSaveLogsToFile.setEnabled(false);
  
          final EditText etLogFile = view.findViewById(R.id.ETLogFile);
          final String defaultLogPath = LogView.getLogFile().getPath();
@@ -1132,16 +1133,16 @@ index c3f422c..87c1f28 100644
  
      private final Context context;
 diff --git a/app/src/main/java/com/winlator/widget/LogView.java b/app/src/main/java/com/winlator/widget/LogView.java
-index 6343202..78fa688 100644
+index 6343202..590a3d5 100644
 --- a/app/src/main/java/com/winlator/widget/LogView.java
 +++ b/app/src/main/java/com/winlator/widget/LogView.java
-@@ -1,11 +1,17 @@
+@@ -1,23 +1,26 @@
  package com.winlator.widget;
  
  import android.content.Context;
+-import android.content.SharedPreferences;
 +import android.content.ContentValues;
 +import android.content.ContentUris;
- import android.content.SharedPreferences;
 +import android.database.Cursor;
  import android.graphics.Canvas;
  import android.graphics.Paint;
@@ -1153,7 +1154,11 @@ index 6343202..78fa688 100644
  import android.text.format.DateFormat;
  import android.util.AttributeSet;
  import android.view.MotionEvent;
-@@ -17,7 +23,6 @@ import androidx.preference.PreferenceManager;
+ import android.view.View;
+ 
+ import androidx.annotation.Nullable;
+-import androidx.preference.PreferenceManager;
+ 
  import com.winlator.MainActivity;
  import com.winlator.R;
  import com.winlator.core.AppUtils;
@@ -1161,7 +1166,7 @@ index 6343202..78fa688 100644
  import com.winlator.core.StreamUtils;
  import com.winlator.core.UnitUtils;
  import com.winlator.math.Mathf;
-@@ -26,8 +31,9 @@ import java.io.BufferedOutputStream;
+@@ -26,8 +29,9 @@ import java.io.BufferedOutputStream;
  import java.io.BufferedWriter;
  import java.io.File;
  import java.io.FileOutputStream;
@@ -1172,17 +1177,18 @@ index 6343202..78fa688 100644
  import java.io.PrintStream;
  import java.util.ArrayList;
  
-@@ -62,16 +68,14 @@ public class LogView extends View {
+@@ -61,19 +65,18 @@ public class LogView extends View {
+     public LogView(Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
          super(context, attrs, defStyleAttr, defStyleRes);
  
-         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
 -        String logPath = preferences.getString("log_file", getLogFile().getPath());
 -        boolean saveToFile = preferences.getBoolean("save_logs_to_file", false);
 -
 -        File logFile = new File(logPath);
 -        FileUtils.delete(logFile);
 +        String logPath = getLogFile().getPath();
-+        boolean saveToFile = preferences.getBoolean("save_logs_to_file", true);
++        boolean saveToFile = true;
  
          if (saveToFile) {
              PrintStream printStream = null;
@@ -1190,10 +1196,15 @@ index 6343202..78fa688 100644
 -                printStream = new PrintStream(new BufferedOutputStream(new FileOutputStream(logFile), StreamUtils.BUFFER_SIZE));
 +                OutputStream output = openDownloadsLog(context, logPath);
 +                if (output != null) printStream = new PrintStream(new BufferedOutputStream(output, StreamUtils.BUFFER_SIZE));
++            }
++            catch (Exception e) {
++                AppUtils.showToast(context, R.string.log_save_failed);
              }
-             catch (IOException e) {}
+-            catch (IOException e) {}
              this.printStream = printStream;
-@@ -212,35 +216,65 @@ public class LogView extends View {
+         }
+         else printStream = null;
+@@ -212,35 +215,65 @@ public class LogView extends View {
              printStream.append(line);
              printStream.flush();
          }
@@ -1618,10 +1629,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..0de62a7 100644
+index 61fcd5e..c25c682 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,22 @@
+@@ -1,6 +1,23 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -1638,6 +1649,7 @@ index 61fcd5e..0de62a7 100644
 +    <string name="last_launch">Last launch</string>
 +    <string name="program_ended_early">The Windows session ended early (exit code %1$d). Check the log for details.</string>
 +    <string name="log_saved_to">Log: /sdcard/Download/MiniEXE/logs.txt</string>
++    <string name="log_save_failed">Unable to save the log in Downloads.</string>
 +    <string name="close_current_session">Close the running session before switching containers.</string>
 +    <string name="minimize">Minimize</string>
 +    <string name="restore">Restore</string>
@@ -1645,7 +1657,7 @@ index 61fcd5e..0de62a7 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +367,10 @@
+@@ -351,10 +368,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
