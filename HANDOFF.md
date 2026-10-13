@@ -217,6 +217,20 @@ winetricks switch). .NET 4.0/4.5 now run with their native `/q /norestart`,
 with fallback `/x:<tmp> /q` extraction and the extracted `Setup.exe /q
 /norestart`.
 
+Ninth report: `/q /norestart` and `/x:<dir> /q` fail identically (code 6,
+no child startup), so the quoted argument was not the cause; Wine cannot
+start this stub with any arguments. The fallback now runs three probes:
+(A) a copy stored inside the prefix instead of behind the cache symlink,
+(B) a 512 KB truncated copy without the payload (`<file>.probe.exe`,
+started with `start` so an error dialog cannot block), and (C) `/x`
+self-extraction. Whether B starts (an `init_peb` line in `logs.txt`) shows
+whether the 50 MB overlay is what prevents process creation.
+
+**Releases:** pushes to `main` now also publish the APK to GitHub Releases
+(`build-YYYYMMDD-HHMM-<sha>`, marked latest) via `gh release create` in
+the workflow (`permissions: contents: write`). The one-day artifact upload
+remains.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft
