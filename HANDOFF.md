@@ -1,6 +1,6 @@
 # MiniEXE technical handoff
 
-Last updated: 2026-10-13. This document describes the Android implementation at commit
+Last updated: 2026-10-12. This document describes the Android implementation at commit
 `256e56bc74b89bb15247ff3018e4e693bd7b64c1` on `main`.
 
 ## Project and repository
@@ -68,6 +68,41 @@ Winlator until the patch is applied.
   Early session exits are shown on the home screen with their exit code; the
   Logs button opens the live log. Existing MiniEXE settings cannot disable
   this diagnostic log.
+
+### Milestone 2.1: home-screen container settings
+
+- The Simple Mode home screen has a **Container** section showing the home
+  container's name, screen size, graphics driver, DX wrapper, and Box64
+  preset, plus a note when that container is the one currently running
+  (changes apply after the session is closed).
+- **Container Settings** opens Winlator's full container editor
+  (`ContainerDetailFragment`) for the home container, creating the default
+  container first if none exists. Advanced Mode is no longer required to
+  change per-container settings.
+- With more than one container, **Switch Container** picks which one the home
+  screen targets. The choice is stored in the `miniexe_home_container`
+  preference and is also used by Run EXE and File Explorer. A deleted
+  selection falls back to the first container.
+- Code: `MainActivity.getHomeContainer/withHomeContainer/openContainerSettings`,
+  `MiniHomeFragment.addContainerSection`, and
+  `XServerDisplayActivity.getActiveContainerId`.
+
+### Box86: requested, not added
+
+Box86 was requested in the same change and deliberately not implemented:
+
+- Box86 is an armhf (32-bit ARM) binary. The Pixel 9's Tensor G4 CPU cores
+  (Cortex-X4, A720, A520) are AArch64-only, so a box86 binary cannot execute
+  on the target device.
+- The pinned Winlator runtime has no armhf userspace and uses a WOW64 Wine
+  build; box86 would also need a separate 32-bit ARM rootfs and a non-WOW64
+  i386 Wine build, which upstream Winlator removed.
+- 32-bit Windows programs already run through Wine WOW64 under Box64; the
+  per-container Box64 preset is now reachable from the home screen.
+
+If box86 is wanted for other, AArch32-capable devices, scope it as a separate
+optional runtime with its own rootfs and Wine build, and keep it off by
+default on AArch64-only CPUs.
 
 The implementation details and short build instructions are also in
 [`MINIEXE.md`](MINIEXE.md).
@@ -145,7 +180,7 @@ All Android paths below are relative to the `app` submodule:
 | File or area | Responsibility |
 | --- | --- |
 | `app/src/main/java/com/winlator/MainActivity.java` | Main navigation, default container/browser launch, recent program records |
-| `app/src/main/java/com/winlator/MiniHomeFragment.java` | Simple Mode actions, recent and pinned programs |
+| `app/src/main/java/com/winlator/MiniHomeFragment.java` | Simple Mode actions, container summary/settings/switcher, recent and pinned programs |
 | `app/src/main/java/com/winlator/InstalledProgramsFragment.java` | Desktop and Start Menu shortcuts |
 | `app/src/main/java/com/winlator/MiniSettingsFragment.java` | Theme and Advanced Mode entry |
 | `app/src/main/java/com/winlator/XServerDisplayActivity.java` | Wine session lifecycle, toolbar, same-session launch, early-exit reporting |

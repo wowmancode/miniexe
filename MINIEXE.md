@@ -30,6 +30,8 @@ Milestone 2 adds a default Simple Mode home screen with Run EXE, installed deskt
 
 Session output is now saved automatically to `/sdcard/Download/MiniEXE/logs.txt` through Android's Downloads API on Android 10 and newer. The file is replaced on each launch. Wine warnings and errors are enabled by default, and an early session exit is reported on the home screen with its exit code. The Logs button in the session toolbar opens the live log.
 
+The home screen also has a Container section with a settings summary, a Container Settings button that opens the full per-container editor (Box64 preset, graphics, DX wrapper, screen size, drives, environment variables, Windows components) without enabling Advanced Mode, and a Switch Container choice when several containers exist. Box86 is not included: it is a 32-bit ARM program and the Pixel 9's CPU cores are 64-bit only; 32-bit Windows programs use Wine WOW64 under Box64.
+
 Physical Pixel 9 behavior, 32-bit WOW64 execution, window interaction, and VEGAS Pro compatibility still require device tests. A reported 32-bit UPX-packed GUI executable briefly shows a black screen and exits; its actual EXE and log have not been supplied, so the cause is unknown. The next diagnostic step is to run it with this build and inspect the saved log. Optional dependency selection is planned for Milestone 3.
 
 ## Handoff

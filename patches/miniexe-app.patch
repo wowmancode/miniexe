@@ -208,7 +208,7 @@ index 0000000..6db1839
 +    }
 +}
 diff --git a/app/src/main/java/com/winlator/MainActivity.java b/app/src/main/java/com/winlator/MainActivity.java
-index dd126b1..ba9d700 100644
+index dd126b1..fbe3259 100644
 --- a/app/src/main/java/com/winlator/MainActivity.java
 +++ b/app/src/main/java/com/winlator/MainActivity.java
 @@ -31,6 +31,11 @@ import com.winlator.core.Callback;
@@ -259,7 +259,7 @@ index dd126b1..ba9d700 100644
  
              actionBar.setHomeAsUpIndicator(R.drawable.icon_action_bar_menu);
              onNavigationItemSelected(navigationView.getMenu().findItem(menuItemId));
-@@ -132,12 +138,71 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+@@ -132,12 +138,95 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                  BaseFileManagerFragment fileManagerFragment = (BaseFileManagerFragment)currentFragment;
                  if (fileManagerFragment.onBackPressed()) return;
              }
@@ -280,10 +280,23 @@ index dd126b1..ba9d700 100644
 +        navigationView.getMenu().findItem(R.id.menu_item_input_controls).setVisible(advanced);
 +    }
 +
-+    public void openDefaultFiles() {
++    public static final String HOME_CONTAINER_KEY = "miniexe_home_container";
++
++    public Container getHomeContainer(ContainerManager manager) {
++        if (manager.getContainers().isEmpty()) return null;
++        Container selected = manager.getContainerById(preferences.getInt(HOME_CONTAINER_KEY, 0));
++        return selected != null ? selected : manager.getContainers().get(0);
++    }
++
++    public void setHomeContainer(int containerId) {
++        preferences.edit().putInt(HOME_CONTAINER_KEY, containerId).apply();
++    }
++
++    public void withHomeContainer(Callback<Container> callback) {
 +        ContainerManager manager = new ContainerManager(this);
-+        if (!manager.getContainers().isEmpty()) {
-+            showFragment(new ContainerFileManagerFragment(manager.getContainers().get(0).id));
++        Container existing = getHomeContainer(manager);
++        if (existing != null) {
++            callback.call(existing);
 +            return;
 +        }
 +        if (!RootFS.find(this).isValid()) {
@@ -296,9 +309,20 @@ index dd126b1..ba9d700 100644
 +        catch (Exception ignored) {}
 +        manager.createContainerAsync(data, container -> {
 +            preloaderDialog.close();
-+            if (container != null) showFragment(new ContainerFileManagerFragment(container.id));
++            if (container != null) {
++                setHomeContainer(container.id);
++                callback.call(container);
++            }
 +            else AppUtils.showToast(this, R.string.unable_to_install_system_files);
 +        });
++    }
++
++    public void openDefaultFiles() {
++        withHomeContainer(container -> showFragment(new ContainerFileManagerFragment(container.id)));
++    }
++
++    public void openContainerSettings() {
++        withHomeContainer(container -> showFragment(new ContainerDetailFragment(container.id)));
 +    }
 +
 +    public void launchProgram(int containerId, String path, boolean shortcut) {
@@ -333,7 +357,7 @@ index dd126b1..ba9d700 100644
      }
  
      public void setOpenFileCallback(Callback<Uri> openFileCallback) {
-@@ -186,6 +251,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+@@ -186,6 +275,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
          }
  
          switch (item.getItemId()) {
@@ -343,7 +367,7 @@ index dd126b1..ba9d700 100644
              case R.id.menu_item_shortcuts:
                  preferences.edit().putBoolean("show_shortcuts_first", true).apply();
                  showFragment(new ShortcutsFragment());
-@@ -198,7 +266,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+@@ -198,7 +290,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                  showFragment(new InputControlsFragment(selectedProfileId));
                  break;
              case R.id.menu_item_settings:
@@ -352,7 +376,7 @@ index dd126b1..ba9d700 100644
                  break;
              case R.id.menu_item_about:
                  (new AboutDialog(this)).show();
-@@ -216,4 +284,4 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
+@@ -216,4 +308,4 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
          drawerLayout.closeDrawer(GravityCompat.START);
          currentFragment = fragment;
      }
@@ -361,10 +385,10 @@ index dd126b1..ba9d700 100644
 +}
 diff --git a/app/src/main/java/com/winlator/MiniHomeFragment.java b/app/src/main/java/com/winlator/MiniHomeFragment.java
 new file mode 100644
-index 0000000..e5d7a2f
+index 0000000..9b7fd47
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/MiniHomeFragment.java
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,213 @@
 +package com.winlator;
 +
 +import android.os.Bundle;
@@ -381,6 +405,10 @@ index 0000000..e5d7a2f
 +import androidx.fragment.app.Fragment;
 +import androidx.preference.PreferenceManager;
 +
++import androidx.appcompat.app.AlertDialog;
++
++import com.winlator.box64.Box64Preset;
++import com.winlator.box64.Box64PresetManager;
 +import com.winlator.container.Container;
 +import com.winlator.container.ContainerManager;
 +import com.winlator.container.Shortcut;
@@ -448,6 +476,8 @@ index 0000000..e5d7a2f
 +        button(getString(R.string.running_apps), () -> XServerDisplayActivity.showRunningSession(activity));
 +        button(getString(R.string.settings), () -> activity.showFragment(new MiniSettingsFragment()));
 +
++        addContainerSection(activity);
++
 +        heading(R.string.pinned_programs);
 +        JSONArray pinned = readList("miniexe_pinned");
 +        for (int i = 0; i < pinned.length(); i++) {
@@ -494,6 +524,50 @@ index 0000000..e5d7a2f
 +            TextView empty = new TextView(requireContext());
 +            empty.setText(R.string.no_items_to_display);
 +            content.addView(empty);
++        }
++    }
++
++    private void addContainerSection(MainActivity activity) {
++        heading(R.string.container);
++        ContainerManager manager = new ContainerManager(requireContext());
++        Container container = activity.getHomeContainer(manager);
++        TextView summary = new TextView(requireContext());
++        if (container == null) summary.setText(R.string.no_container_yet);
++        else {
++            Box64Preset preset = Box64PresetManager.getPreset(requireContext(), container.getBox64Preset());
++            summary.setText(getString(R.string.container_summary,
++                    container.getName(),
++                    container.getScreenSize(),
++                    container.getGraphicsDriver(),
++                    container.getDXWrapper(),
++                    preset != null ? preset.name : container.getBox64Preset()));
++            if (XServerDisplayActivity.getActiveContainerId() == container.id) {
++                summary.append("\n" + getString(R.string.container_running_note));
++            }
++        }
++        content.addView(summary);
++
++        button(getString(R.string.container_settings), activity::openContainerSettings);
++
++        ArrayList<Container> containers = manager.getContainers();
++        if (container != null && containers.size() > 1) {
++            button(getString(R.string.switch_container), () -> {
++                String[] names = new String[containers.size()];
++                int checked = 0;
++                for (int i = 0; i < containers.size(); i++) {
++                    names[i] = containers.get(i).getName();
++                    if (containers.get(i).id == container.id) checked = i;
++                }
++                new AlertDialog.Builder(requireContext())
++                        .setTitle(R.string.switch_container)
++                        .setSingleChoiceItems(names, checked, (dialog, which) -> {
++                            activity.setHomeContainer(containers.get(which).id);
++                            dialog.dismiss();
++                            populate();
++                        })
++                        .setNegativeButton(android.R.string.cancel, null)
++                        .show();
++            });
 +        }
 +    }
 +
@@ -649,7 +723,7 @@ index ca3c83b..1c55ff9 100644
          }
      }
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-index 53fb456..5ddd5c9 100644
+index 53fb456..ebd6434 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
 +++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 @@ -14,9 +14,13 @@ import android.view.Menu;
@@ -826,7 +900,7 @@ index 53fb456..5ddd5c9 100644
          if (container != null && container.getHUDMode() != FrameRating.Mode.DISABLED.ordinal()) {
              frameRating = new FrameRating(this);
              frameRating.setMode(FrameRating.Mode.values()[container.getHUDMode()]);
-@@ -623,6 +658,104 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -623,6 +658,110 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
      }
  
@@ -855,6 +929,12 @@ index 53fb456..5ddd5c9 100644
 +        if (session.container.id != containerId) AppUtils.showToast(activity, R.string.close_current_session);
 +        showRunningSession(activity);
 +        return true;
++    }
++
++    public static int getActiveContainerId() {
++        XServerDisplayActivity session = activeSession.get();
++        if (session == null || session.isFinishing() || session.container == null) return -1;
++        return session.container.id;
 +    }
 +
 +    public static boolean tryLaunchInSession(Activity activity, int containerId, String path, boolean shortcutFile) {
@@ -931,7 +1011,7 @@ index 53fb456..5ddd5c9 100644
      private void showInputControlsDialog() {
          final ContentDialog dialog = new ContentDialog(this, R.layout.input_controls_dialog);
          dialog.setTitle(R.string.input_controls);
-@@ -1123,4 +1256,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -1123,4 +1262,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
          else return false;
      }
@@ -1629,10 +1709,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..c25c682 100644
+index 61fcd5e..95943bb 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,23 @@
+@@ -1,6 +1,28 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -1650,6 +1730,11 @@ index 61fcd5e..c25c682 100644
 +    <string name="program_ended_early">The Windows session ended early (exit code %1$d). Check the log for details.</string>
 +    <string name="log_saved_to">Log: /sdcard/Download/MiniEXE/logs.txt</string>
 +    <string name="log_save_failed">Unable to save the log in Downloads.</string>
++    <string name="container_settings">Container Settings</string>
++    <string name="switch_container">Switch Container</string>
++    <string name="no_container_yet">No container yet. One is created the first time you open Run EXE, File Explorer, or Container Settings.</string>
++    <string name="container_summary">%1$s\nScreen: %2$s · Graphics: %3$s · DX: %4$s · Box64: %5$s</string>
++    <string name="container_running_note">This container is running. Changes apply after the session is closed.</string>
 +    <string name="close_current_session">Close the running session before switching containers.</string>
 +    <string name="minimize">Minimize</string>
 +    <string name="restore">Restore</string>
@@ -1657,7 +1742,7 @@ index 61fcd5e..c25c682 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +368,10 @@
+@@ -351,10 +373,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
