@@ -34,4 +34,7 @@ Physical Pixel 9 behavior, 32-bit WOW64 execution, window interaction, and VEGAS
 
 ## Handoff
 
+See [HANDOFF.md](HANDOFF.md) for the full project status, code map, build
+workflow, device test plan, known blockers, and remaining milestones.
+
 The Android source remains pinned as the upstream `app` submodule. Apply `patches/miniexe-app.patch` before editing. Refresh the patch with `git -C app add -N <new files>` and `git -C app diff --binary > patches/miniexe-app.patch`; avoid including relocated runtime archives. CI applies that patch and runs `scripts/relocate-assets.py` before building. Milestone 3 should add optional dependency installation to the shared container while keeping the launch and log paths working.
