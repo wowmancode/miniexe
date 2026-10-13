@@ -144,6 +144,16 @@ programs in batch mode and passes the original command line, which preserves
 `/c:"install.exe /q"`. The install log now records each command line and its
 exit code. Re-test .NET 4.0 after this build.
 
+Second report: an install finished with exit code 6, which has no
+documented meaning for .NET 4 setup. The script now copies installer logs
+(`%TEMP%\dd_*.*`, `*.htm*`, `*.log`) and `install-log.txt` to
+`C:\miniexe\setup-logs` and, when drive D: (the default Downloads mapping)
+exists, to `Download/MiniEXE/setup-logs`. A progress panel
+(`widget/DependencyProgressOverlay.java`) now shows in the session while
+the script runs: it polls `C:\miniexe\progress.txt` (`STEP i n name`, then
+`DONE n`), with an overall per-item bar and an indeterminate bar for the
+current installer, since installers report no percentage.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft

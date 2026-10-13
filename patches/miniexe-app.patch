@@ -1158,10 +1158,10 @@ index 0000000..8c26cda
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..10074c0
+index 0000000..7e05b7e
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,581 @@
+@@ -0,0 +1,608 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1298,7 +1298,18 @@ index 0000000..10074c0
 +        }
 +    }
 +
++    private static volatile File activeProgressFile;
++
 +    private DependencyManager() {}
++
++    /** C:\\miniexe\\progress.txt of the install currently running, or null. */
++    public static File getActiveProgressFile() {
++        return activeProgressFile;
++    }
++
++    public static void clearActiveProgress() {
++        activeProgressFile = null;
++    }
 +
 +    private static List<String> strings(JSONArray array) {
 +        ArrayList<String> list = new ArrayList<>();
@@ -1678,7 +1689,10 @@ index 0000000..10074c0
 +            FileUtils.symlink(cache, link);
 +        }
 +
++        new File(installDir, "progress.txt").delete();
 +        final String log = "C:\\miniexe\\install-log.txt";
++        final String progress = "C:\\miniexe\\progress.txt";
++        int step = 0;
 +        StringBuilder bat = new StringBuilder();
 +        bat.append("@echo off\r\n");
 +        bat.append("echo MiniEXE dependency install > ").append(log).append("\r\n");
@@ -1689,6 +1703,8 @@ index 0000000..10074c0
 +            String cacheDir = "C:\\miniexe\\cache\\" + item.id;
 +            String tmpDir = "C:\\miniexe\\tmp\\" + item.id;
 +            bat.append("\r\nrem ---- ").append(item.id).append("\r\n");
++            step++;
++            bat.append("echo STEP ").append(step).append(' ').append(items.size()).append(' ').append(ascii(item.name)).append(" > ").append(progress).append("\r\n");
 +            bat.append("echo [").append(item.id).append("] ").append(ascii(item.name)).append(" >> ").append(log).append("\r\n");
 +            bat.append("set MINIEXE_RC=0\r\n");
 +            bat.append("if not exist ").append(tmpDir).append(" mkdir ").append(tmpDir).append("\r\n");
@@ -1721,8 +1737,18 @@ index 0000000..10074c0
 +            bat.append("echo %MINIEXE_RC% > C:\\miniexe\\status\\").append(item.id).append(".txt\r\n");
 +            bat.append("rmdir /s /q ").append(tmpDir).append(" >nul 2>nul\r\n");
 +        }
-+        bat.append("\r\necho. >> ").append(log).append("\r\n");
++        // Keep installer logs (e.g. .NET setup's dd_*.txt and HTML report) where the user can reach them:
++        // C:\miniexe\setup-logs, and D:\MiniEXE\setup-logs when D: is the default Downloads drive.
++        bat.append("\r\nif not exist C:\\miniexe\\setup-logs mkdir C:\\miniexe\\setup-logs\r\n");
++        for (String pattern : new String[]{"dd_*.*", "*.htm*", "*.log"}) {
++            bat.append("copy /Y \"%TEMP%\\").append(pattern).append("\" C:\\miniexe\\setup-logs\\ >nul 2>nul\r\n");
++        }
++        bat.append("echo. >> ").append(log).append("\r\n");
 +        bat.append("echo Finished. Return to MiniEXE and open Dependencies to see verified status. >> ").append(log).append("\r\n");
++        bat.append("copy /Y ").append(log).append(" C:\\miniexe\\setup-logs\\ >nul 2>nul\r\n");
++        bat.append("if exist D:\\ mkdir D:\\MiniEXE\\setup-logs >nul 2>nul\r\n");
++        bat.append("if exist D:\\ copy /Y C:\\miniexe\\setup-logs\\*.* D:\\MiniEXE\\setup-logs\\ >nul 2>nul\r\n");
++        bat.append("echo DONE ").append(items.size()).append(" > ").append(progress).append("\r\n");
 +        bat.append("start notepad.exe ").append(log).append("\r\n");
 +
 +        File script = new File(installDir, "install.bat");
@@ -1736,6 +1762,7 @@ index 0000000..10074c0
 +
 +    /** Runs the script in the container's running session, or starts a session for it. */
 +    public static void launch(Activity activity, Container container, File script) {
++        activeProgressFile = new File(script.getParentFile(), "progress.txt");
 +        if (XServerDisplayActivity.tryLaunchInSession(activity, container.id, script.getPath(), false)) return;
 +        Intent intent = new Intent(activity, XServerDisplayActivity.class);
 +        intent.putExtra("container_id", container.id);
@@ -2357,7 +2384,7 @@ index ca3c83b..1c55ff9 100644
          }
      }
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-index 53fb456..ebd6434 100644
+index 53fb456..f74449e 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
 +++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 @@ -14,9 +14,13 @@ import android.view.Menu;
@@ -2433,15 +2460,16 @@ index 53fb456..ebd6434 100644
          xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
              @Override
              public void onUpdateWindowContent(Window window) {
-@@ -337,6 +349,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -337,6 +349,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
  
      @Override
      protected void onDestroy() {
++        DependencyManager.clearActiveProgress();
 +        if (activeSession.get() == this) activeSession.clear();
          winHandler.stop();
          if (environment != null) environment.stopEnvironmentComponents();
          ForegroundService.stopSession(this);
-@@ -367,6 +380,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -367,6 +381,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                  break;
              case R.id.menu_item_toggle_fullscreen:
                  renderer.toggleFullscreen();
@@ -2458,7 +2486,7 @@ index 53fb456..ebd6434 100644
                  drawerLayout.closeDrawers();
                  break;
              case R.id.menu_item_task_manager:
-@@ -384,6 +407,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -384,6 +408,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                      magnifierView.setZoomButtonCallback((value) -> {
                          renderer.setMagnifierZoom(Mathf.clamp(renderer.getMagnifierZoom() + value, 1.0f, 3.0f));
                          magnifierView.setZoomValue(renderer.getMagnifierZoom());
@@ -2466,7 +2494,7 @@ index 53fb456..ebd6434 100644
                      });
                      magnifierView.setZoomValue(renderer.getMagnifierZoom());
                      magnifierView.setHideButtonCallback(() -> {
-@@ -497,7 +521,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -497,7 +522,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
  
          boolean enableWineDebug = preferences.getBoolean("enable_wine_debug", false);
          String wineDebugChannels = preferences.getString("wine_debug_channels", SettingsFragment.DEFAULT_WINE_DEBUG_CHANNELS);
@@ -2475,7 +2503,7 @@ index 53fb456..ebd6434 100644
  
          FileUtils.clear(rootFS.getTmpDir());
  
-@@ -506,7 +530,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -506,7 +531,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          if (container != null) {
              if (container.getHUDMode() == FrameRating.Mode.FULL.ordinal()) envVars.put("X11_WND_GPU_INFO", "1");
  
@@ -2484,7 +2512,7 @@ index 53fb456..ebd6434 100644
              String guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
              guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
  
-@@ -552,7 +576,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -552,7 +577,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
  
          guestProgramLauncherComponent.setEnvVars(envVars);
@@ -2499,7 +2527,7 @@ index 53fb456..ebd6434 100644
          environment.addComponent(guestProgramLauncherComponent);
  
          if (isGenerateWineprefix()) {
-@@ -563,6 +593,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -563,6 +594,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
              envVars.putAll(overrideEnvVars);
              overrideEnvVars = null;
          }
@@ -2507,7 +2535,7 @@ index 53fb456..ebd6434 100644
          environment.startEnvironmentComponents();
  
          winHandler.start();
-@@ -583,6 +614,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -583,6 +615,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
          renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
          renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
@@ -2515,7 +2543,7 @@ index 53fb456..ebd6434 100644
  
          xServer.setRenderer(renderer);
          rootView.addView(xServerView);
-@@ -591,7 +623,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -591,7 +624,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          capturePointerOnExternalMouse = preferences.getBoolean("capture_pointer_on_external_mouse", true);
          touchpadView = new TouchpadView(this, xServer, capturePointerOnExternalMouse);
          touchpadView.setSensitivity(globalCursorSpeed);
@@ -2525,16 +2553,17 @@ index 53fb456..ebd6434 100644
          touchpadView.setFourFingersTapCallback(() -> {
              if (!drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.openDrawer(GravityCompat.START);
          });
-@@ -604,6 +637,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -604,6 +638,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          inputControlsView.setVisibility(View.GONE);
          rootView.addView(inputControlsView);
  
 +        addQuickToolbar(rootView, renderer);
++        com.winlator.widget.DependencyProgressOverlay.attach(rootView);
 +
          if (container != null && container.getHUDMode() != FrameRating.Mode.DISABLED.ordinal()) {
              frameRating = new FrameRating(this);
              frameRating.setMode(FrameRating.Mode.values()[container.getHUDMode()]);
-@@ -623,6 +658,110 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -623,6 +660,110 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
      }
  
@@ -2645,7 +2674,7 @@ index 53fb456..ebd6434 100644
      private void showInputControlsDialog() {
          final ContentDialog dialog = new ContentDialog(this, R.layout.input_controls_dialog);
          dialog.setTitle(R.string.input_controls);
-@@ -1123,4 +1262,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+@@ -1123,4 +1264,4 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          }
          else return false;
      }
@@ -2846,6 +2875,169 @@ index c3f422c..87c1f28 100644
      private static final String CHANNEL_NAME = "Winlator Foreground Service";
  
      private final Context context;
+diff --git a/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java b/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java
+new file mode 100644
+index 0000000..b5c716f
+--- /dev/null
++++ b/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java
+@@ -0,0 +1,157 @@
++package com.winlator.widget;
++
++import android.content.Context;
++import android.graphics.Color;
++import android.view.Gravity;
++import android.view.View;
++import android.widget.Button;
++import android.widget.FrameLayout;
++import android.widget.LinearLayout;
++import android.widget.ProgressBar;
++import android.widget.TextView;
++
++import com.winlator.DependencyManager;
++import com.winlator.R;
++import com.winlator.core.FileUtils;
++
++import java.io.File;
++
++/**
++ * Bottom-of-screen progress panel for a running dependency install. The install batch file
++ * writes one status line to C:\miniexe\progress.txt before each item and when it finishes;
++ * this view polls that file. Installers do not report a percentage, so the current item shows
++ * an indeterminate bar and the overall bar advances per item.
++ */
++public class DependencyProgressOverlay extends LinearLayout {
++    private static final long POLL_MS = 700;
++    private final TextView title;
++    private final TextView itemLabel;
++    private final ProgressBar overall;
++    private final ProgressBar current;
++    private String lastLine = "";
++    private boolean dismissed;
++
++    private final Runnable poll = new Runnable() {
++        @Override
++        public void run() {
++            update();
++            postDelayed(this, POLL_MS);
++        }
++    };
++
++    public DependencyProgressOverlay(Context context) {
++        super(context);
++        setOrientation(VERTICAL);
++        setBackgroundColor(0xE6172235);
++        int pad = dp(12);
++        setPadding(pad, pad, pad, pad);
++        setVisibility(GONE);
++        setClickable(true);
++
++        LinearLayout header = new LinearLayout(context);
++        header.setOrientation(HORIZONTAL);
++        header.setGravity(Gravity.CENTER_VERTICAL);
++        title = new TextView(context);
++        title.setTextColor(Color.WHITE);
++        title.setTextSize(16);
++        header.addView(title, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
++        Button hide = new Button(context);
++        hide.setText("×");
++        hide.setMinWidth(0);
++        hide.setMinimumWidth(0);
++        hide.setOnClickListener(v -> {
++            dismissed = true;
++            setVisibility(GONE);
++        });
++        header.addView(hide);
++        addView(header);
++
++        overall = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
++        addView(overall, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
++
++        itemLabel = new TextView(context);
++        itemLabel.setTextColor(Color.WHITE);
++        itemLabel.setPadding(0, dp(6), 0, 0);
++        addView(itemLabel);
++
++        current = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
++        current.setIndeterminate(true);
++        addView(current, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
++    }
++
++    public static DependencyProgressOverlay attach(FrameLayout root) {
++        DependencyProgressOverlay overlay = new DependencyProgressOverlay(root.getContext());
++        int margin = overlay.dp(8);
++        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
++        params.setMargins(margin, margin, margin, margin);
++        root.addView(overlay, params);
++        return overlay;
++    }
++
++    private int dp(int value) {
++        return (int)(value * getResources().getDisplayMetrics().density);
++    }
++
++    @Override
++    protected void onAttachedToWindow() {
++        super.onAttachedToWindow();
++        post(poll);
++    }
++
++    @Override
++    protected void onDetachedFromWindow() {
++        removeCallbacks(poll);
++        super.onDetachedFromWindow();
++    }
++
++    private void update() {
++        File file = DependencyManager.getActiveProgressFile();
++        if (file == null) {
++            if (getVisibility() != GONE) setVisibility(GONE);
++            lastLine = "";
++            dismissed = false;
++            return;
++        }
++        String line = file.isFile() ? FileUtils.readString(file).trim() : "";
++        if (line.equals(lastLine) && (getVisibility() == VISIBLE || dismissed)) return;
++        if (!line.equals(lastLine)) dismissed = false;
++        lastLine = line;
++        if (dismissed) return;
++        setVisibility(VISIBLE);
++
++        String[] parts = line.split(" ", 4);
++        if (parts.length >= 3 && parts[0].equals("STEP")) {
++            int index = parseInt(parts[1]), count = Math.max(1, parseInt(parts[2]));
++            String name = parts.length > 3 ? parts[3] : "";
++            title.setText(getContext().getString(R.string.deps_installing_count, index, count));
++            overall.setMax(count);
++            overall.setProgress(index - 1);
++            itemLabel.setText(name);
++            current.setVisibility(VISIBLE);
++        }
++        else if (parts.length >= 2 && parts[0].equals("DONE")) {
++            int count = Math.max(1, parseInt(parts[1]));
++            title.setText(R.string.deps_install_finished);
++            overall.setMax(count);
++            overall.setProgress(count);
++            itemLabel.setText(R.string.deps_install_finished_hint);
++            current.setVisibility(GONE);
++            final File finished = file;
++            postDelayed(() -> {
++                if (finished.equals(DependencyManager.getActiveProgressFile())) DependencyManager.clearActiveProgress();
++            }, 8000);
++        }
++        else {
++            title.setText(R.string.deps_install_starting);
++            overall.setMax(1);
++            overall.setProgress(0);
++            itemLabel.setText("");
++            current.setVisibility(VISIBLE);
++        }
++    }
++
++    private static int parseInt(String value) {
++        try { return Integer.parseInt(value.trim()); }
++        catch (NumberFormatException e) { return 0; }
++    }
++}
 diff --git a/app/src/main/java/com/winlator/widget/LogView.java b/app/src/main/java/com/winlator/widget/LogView.java
 index 6343202..590a3d5 100644
 --- a/app/src/main/java/com/winlator/widget/LogView.java
@@ -3343,10 +3535,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..11173e0 100644
+index 61fcd5e..0f1b0a2 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,57 @@
+@@ -1,6 +1,61 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -3393,6 +3585,10 @@ index 61fcd5e..11173e0 100644
 +    <string name="deps_no_cabinet">%1$s does not contain the expected cabinet archive.</string>
 +    <string name="skip">Skip</string>
 +    <string name="done">Done</string>
++    <string name="deps_installing_count">Installing dependency %1$d of %2$d</string>
++    <string name="deps_install_starting">Starting dependency install…</string>
++    <string name="deps_install_finished">Dependency install finished</string>
++    <string name="deps_install_finished_hint">Open Dependencies on the home screen to see verified status. Installer logs: Download/MiniEXE/setup-logs</string>
 +    <string name="container_settings">Container Settings</string>
 +    <string name="switch_container">Switch Container</string>
 +    <string name="no_container_yet">No container yet. One is created the first time you open Run EXE, File Explorer, or Container Settings.</string>
@@ -3405,7 +3601,7 @@ index 61fcd5e..11173e0 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +402,10 @@
+@@ -351,10 +406,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
