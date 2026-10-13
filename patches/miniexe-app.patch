@@ -35,10 +35,10 @@ index 1262c0d..4bfbb75 100644
  
 diff --git a/app/src/main/assets/miniexe/dependencies.json b/app/src/main/assets/miniexe/dependencies.json
 new file mode 100644
-index 0000000..d43e6a7
+index 0000000..6afa2ab
 --- /dev/null
 +++ b/app/src/main/assets/miniexe/dependencies.json
-@@ -0,0 +1,596 @@
+@@ -0,0 +1,601 @@
 +{
 + "categories": [
 +  {
@@ -123,7 +123,8 @@ index 0000000..d43e6a7
 +     "name": "SP",
 +     "min": 1
 +    }
-+   }
++   },
++   "debug": "+process,+module,+loaddll,+seh"
 +  },
 +  {
 +   "id": "dotnet40",
@@ -162,7 +163,9 @@ index 0000000..d43e6a7
 +     "name": "Install",
 +     "min": 1
 +    }
-+   }
++   },
++   "debug": "+process,+module,+loaddll,+seh",
++   "retryWithoutWinver": true
 +  },
 +  {
 +   "id": "dotnet45",
@@ -205,7 +208,9 @@ index 0000000..d43e6a7
 +     "name": "Release",
 +     "min": 378389
 +    }
-+   }
++   },
++   "debug": "+process,+module,+loaddll,+seh",
++   "retryWithoutWinver": true
 +  },
 +  {
 +   "id": "vcrun2005",
@@ -1158,10 +1163,10 @@ index 0000000..8c26cda
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..7e05b7e
+index 0000000..14f4eca
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,608 @@
+@@ -0,0 +1,640 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1238,6 +1243,8 @@ index 0000000..7e05b7e
 +        public final String winver;
 +        public final String env;
 +        public final boolean removeMono;
++        public final String debug;
++        public final boolean retryWithoutWinver;
 +        public final List<String> requires;
 +        public final List<String> replaces;
 +        public final List<String> conflicts;
@@ -1256,6 +1263,8 @@ index 0000000..7e05b7e
 +            winver = json.optString("winver", "");
 +            env = json.optString("env", "");
 +            removeMono = json.optBoolean("removeMono");
++            debug = json.optString("debug", "");
++            retryWithoutWinver = json.optBoolean("retryWithoutWinver");
 +            requires = strings(json.optJSONArray("requires"));
 +            replaces = strings(json.optJSONArray("replaces"));
 +            conflicts = strings(json.optJSONArray("conflicts"));
@@ -1696,6 +1705,7 @@ index 0000000..7e05b7e
 +        StringBuilder bat = new StringBuilder();
 +        bat.append("@echo off\r\n");
 +        bat.append("echo MiniEXE dependency install > ").append(log).append("\r\n");
++        bat.append("set MINIEXE_WINEDEBUG=%WINEDEBUG%\r\n");
 +        boolean monoPresent = monoInstalled;
 +        Item mono = catalog.get("mono");
 +        for (Item item : items) {
@@ -1722,14 +1732,14 @@ index 0000000..7e05b7e
 +                }
 +            }
 +            if (!item.env.isEmpty()) bat.append("set ").append(item.env).append("\r\n");
-+            for (String command : item.commands) {
-+                String line = command.replace("{cache}", cacheDir).replace("{tmp}", tmpDir);
-+                bat.append("echo   run: ").append(ascii(line)).append(" >> ").append(log).append("\r\n");
-+                bat.append(line).append("\r\n");
-+                // Capture the exit code first: later builtins (set/echo) may reset %errorlevel% in Wine's cmd.
-+                bat.append("set MINIEXE_LAST=%errorlevel%\r\n");
-+                bat.append("echo   result: %MINIEXE_LAST% >> ").append(log).append("\r\n");
-+                bat.append("if not \"%MINIEXE_LAST%\"==\"0\" set MINIEXE_RC=%MINIEXE_LAST%\r\n");
++            appendCommands(bat, item, cacheDir, tmpDir, installDir, log, "");
++            if (item.retryWithoutWinver && !item.winver.isEmpty()) {
++                bat.append("if \"%MINIEXE_RC%\"==\"0\" goto miniexe_ok_").append(item.id).append("\r\n");
++                bat.append("echo   retrying without the ").append(item.winver).append(" Windows version override >> ").append(log).append("\r\n");
++                bat.append("reg delete \"HKCU\\Software\\Wine\" /v Version /f >nul 2>nul\r\n");
++                bat.append("set MINIEXE_RC=0\r\n");
++                appendCommands(bat, item, cacheDir, tmpDir, installDir, log, "retry");
++                bat.append(":miniexe_ok_").append(item.id).append("\r\n");
 +            }
 +            if (!item.env.isEmpty()) bat.append("set ").append(item.env, 0, item.env.indexOf('=') + 1).append("\r\n");
 +            if (!item.winver.isEmpty()) bat.append("reg delete \"HKCU\\Software\\Wine\" /v Version /f >nul 2>nul\r\n");
@@ -1754,6 +1764,33 @@ index 0000000..7e05b7e
 +        File script = new File(installDir, "install.bat");
 +        FileUtils.write(script, bat.toString().getBytes(StandardCharsets.US_ASCII));
 +        return script;
++    }
++
++    /**
++     * Appends one pass over an item's commands. With a debug channel list, each command runs from
++     * its own small batch file in a nested cmd started with WINEDEBUG set, so the trace covers the
++     * CreateProcess call that launches the installer (the outer cmd's channels are fixed at start).
++     */
++    private static void appendCommands(StringBuilder bat, Item item, String cacheDir, String tmpDir, File installDir, String log, String suffix) throws IOException {
++        int index = 0;
++        for (String command : item.commands) {
++            String line = command.replace("{cache}", cacheDir).replace("{tmp}", tmpDir);
++            bat.append("echo   run: ").append(ascii(line)).append(" >> ").append(log).append("\r\n");
++            if (!item.debug.isEmpty() && !line.startsWith("reg ")) {
++                String name = "run-" + item.id + "-" + (index++) + suffix + ".bat";
++                String inner = "@echo off\r\n" + line + "\r\nexit /b %errorlevel%\r\n";
++                FileUtils.write(new File(installDir, name), inner.getBytes(StandardCharsets.US_ASCII));
++                bat.append("echo   (with WINEDEBUG=").append(item.debug).append(", see Download/MiniEXE/logs.txt) >> ").append(log).append("\r\n");
++                bat.append("set WINEDEBUG=%MINIEXE_WINEDEBUG%,").append(item.debug).append("\r\n");
++                bat.append("cmd.exe /c C:\\miniexe\\").append(name).append("\r\n");
++            }
++            else bat.append(line).append("\r\n");
++            // Capture the exit code first: later builtins (set/echo) may reset %errorlevel% in Wine's cmd.
++            bat.append("set MINIEXE_LAST=%errorlevel%\r\n");
++            if (!item.debug.isEmpty()) bat.append("set WINEDEBUG=%MINIEXE_WINEDEBUG%\r\n");
++            bat.append("echo   result: %MINIEXE_LAST% >> ").append(log).append("\r\n");
++            bat.append("if not \"%MINIEXE_LAST%\"==\"0\" set MINIEXE_RC=%MINIEXE_LAST%\r\n");
++        }
 +    }
 +
 +    private static String ascii(String text) {

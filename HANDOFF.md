@@ -154,6 +154,16 @@ the script runs: it polls `C:\miniexe\progress.txt` (`STEP i n name`, then
 `DONE n`), with an overall per-item bar and an indeterminate bar for the
 current installer, since installers report no percentage.
 
+Third report: run directly from the batch file, the .NET 4.0 line still
+returned 6 and `logs.txt` again had no `init_peb` line for it, so Wine's
+`cmd` could not create the process at all (`CreateProcess`/`ShellExecuteEx`
+failed with ERROR_INVALID_HANDLE); the installer itself never ran. VC++
+installers from the same cache directory start normally. .NET items now run
+each installer from a nested `cmd` with `WINEDEBUG=+process,+module,+loaddll,+seh`
+added (trace goes to `Download/MiniEXE/logs.txt`), and items with a Windows
+version override retry once without it if they fail. Next step: read that
+trace to see why process creation fails before changing the approach.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft
