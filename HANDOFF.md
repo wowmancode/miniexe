@@ -206,6 +206,17 @@ of the installer, plus every raw `MSCF` signature with its header fields, to
 identify the real container format. Cabinet output moved to `.cabs2/` so
 the rescan is not skipped.
 
+Eighth report: the .NET 4.0 installer is a small (213 KB image, base
+0x400000, relocatable, 32-bit) Microsoft "box" stub (`.boxld01` section)
+followed by a ~50 MB overlay with no MSCF signature, so its payload can
+only be unpacked by the stub itself. Wine's `spawn_process` grandchild
+`_exit(1)`s silently if `exec` of the loader fails, and argv is rebuilt
+from the Windows command line; the only difference from the working VC++
+launches is the quoted `/c:"install.exe /q"` argument (an IExpress-era
+winetricks switch). .NET 4.0/4.5 now run with their native `/q /norestart`,
+with fallback `/x:<tmp> /q` extraction and the extracted `Setup.exe /q
+/norestart`.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft
