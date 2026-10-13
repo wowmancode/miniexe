@@ -32,7 +32,9 @@ Session output is now saved automatically to `/sdcard/Download/MiniEXE/logs.txt`
 
 The home screen also has a Container section with a settings summary, a Container Settings button that opens the full per-container editor (Box64 preset, graphics, DX wrapper, screen size, drives, environment variables, Windows components) without enabling Advanced Mode, and a Switch Container choice when several containers exist. Box86 is not included: it is a 32-bit ARM program and the Pixel 9's CPU cores are 64-bit only; 32-bit Windows programs use Wine WOW64 under Box64.
 
-Physical Pixel 9 behavior, 32-bit WOW64 execution, window interaction, and VEGAS Pro compatibility still require device tests. A reported 32-bit UPX-packed GUI executable briefly shows a black screen and exits; its actual EXE and log have not been supplied, so the cause is unknown. The next diagnostic step is to run it with this build and inspect the saved log. Optional dependency selection is planned for Milestone 3.
+Milestone 3 adds an optional Dependencies screen (shown once on first launch with Skip, and available from Home and Settings). It toggles Winlator's bundled DirectX, media, and VC++ 2005/2010 components, and downloads official installers for Wine Mono, .NET 3.5 SP1/4.0/4.5, VC++ 2008/2012/2013/2015–2022, corefonts, and MSXML 3/6. Downloads are checked against pinned SHA-256 hashes and cached; installers run inside the container through a generated batch file; installed status is verified from the container's files and registry. See HANDOFF.md for details and untested areas.
+
+Physical Pixel 9 behavior, 32-bit WOW64 execution, window interaction, and VEGAS Pro compatibility still require device tests. A reported 32-bit UPX-packed GUI executable briefly shows a black screen and exits; its actual EXE and log have not been supplied, so the cause is unknown. The next diagnostic step is to run it with this build and inspect the saved log.
 
 ## Handoff
 

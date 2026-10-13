@@ -91,6 +91,63 @@ CI build for this change passed:
 <https://github.com/wowmancode/miniexe/actions/runs/38328736344> (APK built and
 checked; no device test yet).
 
+### Milestone 3: optional dependency installer (built, not device-tested)
+
+- **Entry points.** On first launch, once the runtime is installed, the home
+  screen opens **Dependencies** once (`miniexe_deps_prompted`); **Skip**
+  leaves the container untouched. It is also reachable from the home screen
+  and Settings at any time.
+- **Catalog.** `app/src/main/assets/miniexe/dependencies.json` lists every
+  item, its category, downloads (URL, pinned SHA-256, file name), install
+  commands, DLL overrides, Windows-version override, requirements, conflicts,
+  and how it is verified. URLs and hashes come from Wine 10.10's
+  `appwiz.cpl/addons.c` (Wine Mono) and winetricks `20260125-next`. The 11
+  corefonts hashes were also checked by downloading them.
+- **Bundled items (no download).** Winlator's existing wincomponents
+  (D3DX/D3DCompiler, DirectSound, DirectMusic, XAudio, DirectPlay,
+  DirectShow, WM decoders, VC++ 2005, VC++ 2010) are toggled per container
+  and applied by Winlator at the next session start.
+- **Downloaded installers.** Wine Mono 10.1.0; .NET 3.5 SP1, 4.0, 4.5; VC++
+  2008, 2012, 2013, 2015–2022; corefonts; MSXML 3; MSXML 6 SP2. Files are
+  cached in `files/miniexe/dependency-cache` (cleared from the screen) and
+  exposed to Wine as `C:\miniexe\cache` through a symlink. A SHA-256
+  mismatch discards the file and reports an error. Sizes come from HTTP HEAD
+  requests when the server reports them.
+- **Install.** `DependencyManager.writeInstallScript` writes
+  `C:\miniexe\install.bat`, run in the container's open session or a new
+  one. It sets DLL overrides and a temporary `HKCU\Software\Wine\Version`
+  where winetricks does (.NET 4.0 → winxp, 4.5 → win7), runs each
+  installer with `start /wait`, records exit codes in
+  `C:\miniexe\status\<id>.txt` and `C:\miniexe\install-log.txt`, and
+  opens the log in Notepad. Font and MSXML 6 packages are self-extracting
+  cabinets: the app copies out the embedded cabinet and Wine's `extrac32`
+  unpacks it (no cabextract in the rootfs).
+- **Verified status.** Shown status is read from the container, not from
+  the script: native (non-Wine-builtin) DLLs in `system32`/`syswow64`,
+  expected files, `NET Framework Setup` registry values in `system.reg`, or
+  uninstall display names. A failed attempt shows its exit code.
+- **Conflicts.** Selecting .NET deselects Wine Mono and removes an installed
+  Wine Mono first (via its cached MSI). .NET 4.5 requires and replaces 4.0.
+  GDI/GDI+ and Direct3D 10–12 rendering are listed as information only
+  (Wine builtins and the container DX wrapper).
+- **Code:** `DependencyManager.java`, `DependenciesFragment.java`, the
+  catalog asset, and small hooks in `MiniHomeFragment` and
+  `MiniSettingsFragment`.
+
+Not yet established on a device: each installer's silent switches under
+Wine 10.10 + Box64, .NET installs in general (historically fragile under
+Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft
+replaces that file in place), and extrac32/LZX behaviour for the font
+cabinets. The pure-Java cabinet, registry and builtin-DLL checks were
+unit-tested off-device. CI build for this milestone passed:
+<https://github.com/wowmancode/miniexe/actions/runs/38330298895>.
+
+### 32-bit programs
+
+32-bit Windows EXEs run through Wine WOW64 on Box64; box86 is not needed and
+is not planned. Many 32-bit programs need x86 runtimes, which Milestone 3
+installs (both x86 and x64 VC++ packages are run).
+
 ### Box86: requested, not added
 
 Box86 was requested in the same change and deliberately not implemented:
@@ -257,9 +314,9 @@ root or a Windows ISO, but Windows program licensing still applies.
 
 ## Remaining development milestones
 
-### Milestone 3: optional dependencies
+### Milestone 3: optional dependencies — implemented (see above); device validation remaining
 
-Build a first-run **optional** dependency picker and later Settings access.
+Original scope: build a first-run **optional** dependency picker and later Settings access.
 Users must be able to Skip and run simple EXEs. The requested choices are
 .NET 3.5 SP1, 4.0, 4.5, Wine Mono; vcrun2005 through vcrun2019; DirectX 9
 and supported 10/11 compatibility; corefonts; MSXML 3/6; GDI/GDI+; and
@@ -291,6 +348,8 @@ remaining issues, and update this handoff.
 
 Obtain the failing program's `/sdcard/Download/MiniEXE/logs.txt` from the
 latest APK and reproduce it on the Pixel 9. Capture the EXE name/version and
-whether the failure occurs on first launch or only after an installer. Keep
-the Milestone 3 dependency manager separate from that diagnosis until the
-log shows a specific missing runtime or DLL.
+whether the failure occurs on first launch or only after an installer. If the
+log shows a missing runtime or DLL (for example `msvcr*`, `msvcp*`,
+`mscoree`, or `d3dx9_*`), install it from Dependencies and re-test. Then run
+the Milestone 3 device checks: install each dependency on the Pixel 9 and
+confirm the Dependencies screen reports it as verified.
