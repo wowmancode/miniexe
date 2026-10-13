@@ -88,3 +88,7 @@ jobs:
           gh release delete latest --yes --cleanup-tag || true
           git push --delete origin latest 2>/dev/null || true
           gh release create latest "$apk" --target "$GITHUB_SHA" --title "MiniEXE latest ($short)" --notes "$notes" --latest
+          # Remove any other releases (and their tags) so only "latest" remains.
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
+            if [ "$tag" != "latest" ]; then gh release delete "$tag" --yes --cleanup-tag || true; fi
+          done
