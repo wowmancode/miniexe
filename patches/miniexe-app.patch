@@ -35,10 +35,10 @@ index 1262c0d..4bfbb75 100644
  
 diff --git a/app/src/main/assets/miniexe/dependencies.json b/app/src/main/assets/miniexe/dependencies.json
 new file mode 100644
-index 0000000..6afa2ab
+index 0000000..b0b34c7
 --- /dev/null
 +++ b/app/src/main/assets/miniexe/dependencies.json
-@@ -0,0 +1,601 @@
+@@ -0,0 +1,609 @@
 +{
 + "categories": [
 +  {
@@ -124,7 +124,7 @@ index 0000000..6afa2ab
 +     "min": 1
 +    }
 +   },
-+   "debug": "+process,+module,+loaddll,+seh"
++   "debug": "+process,+server"
 +  },
 +  {
 +   "id": "dotnet40",
@@ -146,7 +146,8 @@ index 0000000..6afa2ab
 +    {
 +     "url": "https://download.microsoft.com/download/9/5/A/95A9616B-7A37-4AF6-BC36-D6EA96C8DAAE/dotNetFx40_Full_x86_x64.exe",
 +     "sha256": "65e064258f2e418816b304f646ff9e87af101e4c9552ab064bb74d281c38659f",
-+     "file": "dotNetFx40_Full_x86_x64.exe"
++     "file": "dotNetFx40_Full_x86_x64.exe",
++     "tryExtractCab": true
 +    }
 +   ],
 +   "commands": [
@@ -164,8 +165,11 @@ index 0000000..6afa2ab
 +     "min": 1
 +    }
 +   },
-+   "debug": "+process,+module,+loaddll,+seh",
-+   "retryWithoutWinver": true
++   "debug": "+process,+server",
++   "fallbackCommands": [
++    "extrac32.exe /Y /E /L {tmp} {cache}\\dotNetFx40_Full_x86_x64.cab",
++    "if exist {tmp}\\install.exe ({tmp}\\install.exe /q) else ({tmp}\\Setup.exe /q /norestart)"
++   ]
 +  },
 +  {
 +   "id": "dotnet45",
@@ -194,7 +198,8 @@ index 0000000..6afa2ab
 +    {
 +     "url": "https://download.microsoft.com/download/b/a/4/ba4a7e71-2906-4b2d-a0e1-80cf16844f5f/dotnetfx45_full_x86_x64.exe",
 +     "sha256": "a04d40e217b97326d46117d961ec4eda455e087b90637cb33dd6cc4a2c228d83",
-+     "file": "dotnetfx45_full_x86_x64.exe"
++     "file": "dotnetfx45_full_x86_x64.exe",
++     "tryExtractCab": true
 +    }
 +   ],
 +   "commands": [
@@ -209,8 +214,11 @@ index 0000000..6afa2ab
 +     "min": 378389
 +    }
 +   },
-+   "debug": "+process,+module,+loaddll,+seh",
-+   "retryWithoutWinver": true
++   "debug": "+process,+server",
++   "fallbackCommands": [
++    "extrac32.exe /Y /E /L {tmp} {cache}\\dotnetfx45_full_x86_x64.cab",
++    "if exist {tmp}\\install.exe ({tmp}\\install.exe /q) else ({tmp}\\Setup.exe /q /norestart)"
++   ]
 +  },
 +  {
 +   "id": "vcrun2005",
@@ -731,10 +739,10 @@ index aab4c0a..f816182 100644
              activity.startActivity(intent);
 diff --git a/app/src/main/java/com/winlator/DependenciesFragment.java b/app/src/main/java/com/winlator/DependenciesFragment.java
 new file mode 100644
-index 0000000..8c26cda
+index 0000000..77479ef
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependenciesFragment.java
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,434 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1108,7 +1116,12 @@ index 0000000..8c26cda
 +            }
 +        }
 +        if (pending.isEmpty()) {
-+            result.done(new ArrayList<>(), new LinkedHashSet<>());
++            executor.execute(() -> {
++                for (DependencyManager.Item item : items) DependencyManager.prepareCabs(activity, item);
++                activity.runOnUiThread(() -> {
++                    if (isAdded()) result.done(new ArrayList<>(), new LinkedHashSet<>());
++                });
++            });
 +            return;
 +        }
 +
@@ -1152,6 +1165,9 @@ index 0000000..8c26cda
 +                    if (!cancelled.get()) errors.add(item.name + ": " + error);
 +                }
 +            }
++            for (DependencyManager.Item item : items) {
++                if (!failed.contains(item.id)) DependencyManager.prepareCabs(activity, item);
++            }
 +            activity.runOnUiThread(() -> {
 +                try { dialog.dismiss(); } catch (Exception ignored) {}
 +                if (!isAdded()) return;
@@ -1163,10 +1179,10 @@ index 0000000..8c26cda
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..14f4eca
+index 0000000..e2a4e48
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,640 @@
+@@ -0,0 +1,661 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1224,12 +1240,15 @@ index 0000000..14f4eca
 +        public final String sha256;
 +        public final String file;
 +        public final boolean extractCab;
++        /** Copy out an embedded cabinet if one exists, for a fallback that runs the extracted setup. */
++        public final boolean tryExtractCab;
 +
 +        Download(JSONObject json) {
 +            url = json.optString("url");
 +            sha256 = json.optString("sha256").toLowerCase(Locale.ENGLISH);
 +            file = json.optString("file");
 +            extractCab = json.optBoolean("extractCab");
++            tryExtractCab = json.optBoolean("tryExtractCab");
 +        }
 +    }
 +
@@ -1244,7 +1263,7 @@ index 0000000..14f4eca
 +        public final String env;
 +        public final boolean removeMono;
 +        public final String debug;
-+        public final boolean retryWithoutWinver;
++        public final List<String> fallbackCommands;
 +        public final List<String> requires;
 +        public final List<String> replaces;
 +        public final List<String> conflicts;
@@ -1264,7 +1283,7 @@ index 0000000..14f4eca
 +            env = json.optString("env", "");
 +            removeMono = json.optBoolean("removeMono");
 +            debug = json.optString("debug", "");
-+            retryWithoutWinver = json.optBoolean("retryWithoutWinver");
++            fallbackCommands = strings(json.optJSONArray("fallbackCommands"));
 +            requires = strings(json.optJSONArray("requires"));
 +            replaces = strings(json.optJSONArray("replaces"));
 +            conflicts = strings(json.optJSONArray("conflicts"));
@@ -1565,6 +1584,24 @@ index 0000000..14f4eca
 +        throw new IOException("Too many redirects");
 +    }
 +
++    /**
++     * For downloads marked tryExtractCab, copies out the embedded cabinet once (or records that
++     * there is none) so the install script's fallback can unpack it with Wine's extrac32.
++     */
++    public static void prepareCabs(Context context, Item item) {
++        for (Download download : item.downloads) {
++            if (!download.tryExtractCab) continue;
++            File file = cacheFile(context, item, download);
++            File cab = cabFile(file);
++            File none = new File(file.getPath() + ".nocab");
++            if (!file.isFile() || cab.isFile() || none.isFile()) continue;
++            if (!extractEmbeddedCab(file, cab)) {
++                cab.delete();
++                FileUtils.writeString(none, "no embedded cabinet");
++            }
++        }
++    }
++
 +    /** Download size in bytes, or -1 when the server does not report it. */
 +    public static long remoteSize(Download download) {
 +        HttpURLConnection connection = null;
@@ -1732,13 +1769,12 @@ index 0000000..14f4eca
 +                }
 +            }
 +            if (!item.env.isEmpty()) bat.append("set ").append(item.env).append("\r\n");
-+            appendCommands(bat, item, cacheDir, tmpDir, installDir, log, "");
-+            if (item.retryWithoutWinver && !item.winver.isEmpty()) {
++            appendCommands(bat, item, item.commands, cacheDir, tmpDir, installDir, log, "", true);
++            if (!item.fallbackCommands.isEmpty()) {
 +                bat.append("if \"%MINIEXE_RC%\"==\"0\" goto miniexe_ok_").append(item.id).append("\r\n");
-+                bat.append("echo   retrying without the ").append(item.winver).append(" Windows version override >> ").append(log).append("\r\n");
-+                bat.append("reg delete \"HKCU\\Software\\Wine\" /v Version /f >nul 2>nul\r\n");
++                bat.append("echo   installer did not run; trying the extracted setup instead >> ").append(log).append("\r\n");
 +                bat.append("set MINIEXE_RC=0\r\n");
-+                appendCommands(bat, item, cacheDir, tmpDir, installDir, log, "retry");
++                appendCommands(bat, item, item.fallbackCommands, cacheDir, tmpDir, installDir, log, "fallback", false);
 +                bat.append(":miniexe_ok_").append(item.id).append("\r\n");
 +            }
 +            if (!item.env.isEmpty()) bat.append("set ").append(item.env, 0, item.env.indexOf('=') + 1).append("\r\n");
@@ -1771,12 +1807,13 @@ index 0000000..14f4eca
 +     * its own small batch file in a nested cmd started with WINEDEBUG set, so the trace covers the
 +     * CreateProcess call that launches the installer (the outer cmd's channels are fixed at start).
 +     */
-+    private static void appendCommands(StringBuilder bat, Item item, String cacheDir, String tmpDir, File installDir, String log, String suffix) throws IOException {
++    private static void appendCommands(StringBuilder bat, Item item, List<String> commands, String cacheDir, String tmpDir, File installDir, String log, String suffix, boolean allowDebug) throws IOException {
 +        int index = 0;
-+        for (String command : item.commands) {
++        boolean debug = allowDebug && !item.debug.isEmpty();
++        for (String command : commands) {
 +            String line = command.replace("{cache}", cacheDir).replace("{tmp}", tmpDir);
 +            bat.append("echo   run: ").append(ascii(line)).append(" >> ").append(log).append("\r\n");
-+            if (!item.debug.isEmpty() && !line.startsWith("reg ")) {
++            if (debug && !line.startsWith("reg ")) {
 +                String name = "run-" + item.id + "-" + (index++) + suffix + ".bat";
 +                String inner = "@echo off\r\n" + line + "\r\nexit /b %errorlevel%\r\n";
 +                FileUtils.write(new File(installDir, name), inner.getBytes(StandardCharsets.US_ASCII));
@@ -1787,7 +1824,7 @@ index 0000000..14f4eca
 +            else bat.append(line).append("\r\n");
 +            // Capture the exit code first: later builtins (set/echo) may reset %errorlevel% in Wine's cmd.
 +            bat.append("set MINIEXE_LAST=%errorlevel%\r\n");
-+            if (!item.debug.isEmpty()) bat.append("set WINEDEBUG=%MINIEXE_WINEDEBUG%\r\n");
++            if (debug) bat.append("set WINEDEBUG=%MINIEXE_WINEDEBUG%\r\n");
 +            bat.append("echo   result: %MINIEXE_LAST% >> ").append(log).append("\r\n");
 +            bat.append("if not \"%MINIEXE_LAST%\"==\"0\" set MINIEXE_RC=%MINIEXE_LAST%\r\n");
 +        }

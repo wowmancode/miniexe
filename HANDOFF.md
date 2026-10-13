@@ -164,6 +164,16 @@ added (trace goes to `Download/MiniEXE/logs.txt`), and items with a Windows
 version override retry once without it if they fail. Next step: read that
 trace to see why process creation fails before changing the approach.
 
+Fourth report: the retry without the Windows version override failed the
+same way (code 6), so the version override is not the cause. The trace
+shows `NtCreateUserProcess` for `dotNetFx40_Full_x86_x64.exe` failing
+before any child process exists. The retry was removed. The .NET 4.0/4.5
+first attempt now traces with `+process,+server`, so the wineserver reply
+that rejects the launch is visible in `logs.txt`. If the self-extractor
+cannot be started, a fallback copies out its embedded cabinet on the
+Android side (`tryExtractCab`, `prepareCabs`), unpacks it with `extrac32`,
+and runs the extracted `install.exe` or `Setup.exe` silently.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft
