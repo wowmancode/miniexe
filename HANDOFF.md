@@ -188,6 +188,15 @@ extracted files. The first attempt now runs with `BOX64_LOG=1`,
 `BOX64_SHOWSEGV=1`, `BOX64_DLSYM_ERROR=1` and `WINEDEBUG=+process,+virtual`
 (no `+server`, which produced 24 MB) to capture why the child exits.
 
+Sixth report: with `BOX64_LOG=1` the .NET child still printed nothing, so
+the failure is probably in the fork/exec step (Wine's spawn child `_exit(1)`s
+silently when exec fails) rather than inside Box64. Not yet confirmed.
+Wine's Notepad cannot copy to the Android clipboard, so the install log is
+now exported by the app to `Download/MiniEXE/install-log.txt` when the
+script reports DONE, and Dependencies has "View last install log" with
+Copy (Android clipboard) and Share. `LogView.openDownloadsFile` generalises
+the MediaStore writer.
+
 Not yet established on a device: each installer's silent switches under
 Wine 10.10 + Box64, .NET installs in general (historically fragile under
 Wine), whether `aka.ms` VC++ 2015–2022 hashes still match (Microsoft

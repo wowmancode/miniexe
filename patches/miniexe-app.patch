@@ -753,10 +753,10 @@ index aab4c0a..f816182 100644
              activity.startActivity(intent);
 diff --git a/app/src/main/java/com/winlator/DependenciesFragment.java b/app/src/main/java/com/winlator/DependenciesFragment.java
 new file mode 100644
-index 0000000..77479ef
+index 0000000..1204fb3
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependenciesFragment.java
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,468 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -895,6 +895,9 @@ index 0000000..77479ef
 +        content.addView(new View(requireContext()), spacer);
 +        button(R.string.deps_install_selected, v -> installSelected());
 +        button(firstRun ? R.string.skip : R.string.done, v -> activity.showFragment(new MiniHomeFragment()));
++        if (container != null && DependencyManager.installLogFile(container).isFile()) {
++            button(R.string.deps_view_install_log, v -> showInstallLog(container));
++        }
 +        long cache = DependencyManager.cacheSize(requireContext());
 +        if (cache > 0) {
 +            button(R.string.deps_clear_cache, v -> {
@@ -1100,6 +1103,37 @@ index 0000000..77479ef
 +        });
 +    }
 +
++    private void showInstallLog(Container container) {
++        String text = DependencyManager.exportInstallLog(requireContext(), container);
++        if (text == null) return;
++        TextView view = new TextView(requireContext());
++        view.setText(text);
++        view.setTextIsSelectable(true);
++        view.setTypeface(android.graphics.Typeface.MONOSPACE);
++        view.setTextSize(12);
++        int pad = dp(16);
++        view.setPadding(pad, pad, pad, pad);
++        ScrollView scroll = new ScrollView(requireContext());
++        scroll.addView(view);
++        new AlertDialog.Builder(requireContext())
++                .setTitle(R.string.deps_install_log)
++                .setView(scroll)
++                .setPositiveButton(R.string.deps_copy, (d, w) -> {
++                    android.content.ClipboardManager clipboard = (android.content.ClipboardManager)requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
++                    if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("MiniEXE install log", text));
++                    android.widget.Toast.makeText(requireContext(), R.string.deps_copied, android.widget.Toast.LENGTH_SHORT).show();
++                })
++                .setNeutralButton(R.string.deps_share, (d, w) -> {
++                    android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
++                    send.setType("text/plain");
++                    send.putExtra(android.content.Intent.EXTRA_SUBJECT, "MiniEXE install log");
++                    send.putExtra(android.content.Intent.EXTRA_TEXT, text);
++                    startActivity(android.content.Intent.createChooser(send, getString(R.string.deps_share)));
++                })
++                .setNegativeButton(android.R.string.cancel, null)
++                .show();
++    }
++
 +    private void showErrors(List<String> errors, @Nullable Runnable continueAction) {
 +        if (!isAdded()) return;
 +        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext())
@@ -1193,10 +1227,10 @@ index 0000000..77479ef
 +}
 diff --git a/app/src/main/java/com/winlator/DependencyManager.java b/app/src/main/java/com/winlator/DependencyManager.java
 new file mode 100644
-index 0000000..0850b16
+index 0000000..6041ba7
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/DependencyManager.java
-@@ -0,0 +1,811 @@
+@@ -0,0 +1,847 @@
 +package com.winlator;
 +
 +import android.app.Activity;
@@ -1344,12 +1378,19 @@ index 0000000..0850b16
 +    }
 +
 +    private static volatile File activeProgressFile;
++    private static volatile Container activeContainer;
 +
 +    private DependencyManager() {}
 +
 +    /** C:\\miniexe\\progress.txt of the install currently running, or null. */
 +    public static File getActiveProgressFile() {
 +        return activeProgressFile;
++    }
++
++    /** Exports the running install's log to Downloads (called when the script reports DONE). */
++    public static void exportActiveInstallLog(Context context) {
++        Container container = activeContainer;
++        if (container != null) exportInstallLog(context, container);
 +    }
 +
 +    public static void clearActiveProgress() {
@@ -1998,9 +2039,38 @@ index 0000000..0850b16
 +        return text.replaceAll("[^ -~]", "-").replaceAll("[<>|&^%]", " ");
 +    }
 +
++    public static File installLogFile(Container container) {
++        return new File(container.getRootDir(), ".wine/drive_c/" + INSTALL_DIR + "/install-log.txt");
++    }
++
++    /**
++     * Copies the container's install log (plus cabinet summaries) to Download/MiniEXE/install-log.txt
++     * so it can be read outside Wine. Returns the text, or null when there is no log yet.
++     */
++    public static String exportInstallLog(Context context, Container container) {
++        File log = installLogFile(container);
++        if (!log.isFile()) return null;
++        String text = FileUtils.readString(log);
++        File statusDir = new File(log.getParentFile(), "status");
++        StringBuilder full = new StringBuilder(text);
++        File[] statuses = statusDir.listFiles();
++        if (statuses != null && statuses.length > 0) {
++            full.append("\n--- status files ---\n");
++            for (File status : statuses) full.append(status.getName()).append(": ").append(FileUtils.readString(status).trim()).append('\n');
++        }
++        String result = full.toString();
++        try (OutputStream out = com.winlator.widget.LogView.openDownloadsFile(context, "install-log.txt",
++                new File(com.winlator.widget.LogView.getLogFile().getParentFile(), "install-log.txt").getPath())) {
++            out.write(result.getBytes(StandardCharsets.UTF_8));
++        }
++        catch (Exception ignored) {}
++        return result;
++    }
++
 +    /** Runs the script in the container's running session, or starts a session for it. */
 +    public static void launch(Activity activity, Container container, File script) {
 +        activeProgressFile = new File(script.getParentFile(), "progress.txt");
++        activeContainer = container;
 +        if (XServerDisplayActivity.tryLaunchInSession(activity, container.id, script.getPath(), false)) return;
 +        Intent intent = new Intent(activity, XServerDisplayActivity.class);
 +        intent.putExtra("container_id", container.id);
@@ -3115,10 +3185,10 @@ index c3f422c..87c1f28 100644
      private final Context context;
 diff --git a/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java b/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java
 new file mode 100644
-index 0000000..b5c716f
+index 0000000..7960ab2
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/widget/DependencyProgressOverlay.java
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,158 @@
 +package com.winlator.widget;
 +
 +import android.content.Context;
@@ -3257,6 +3327,7 @@ index 0000000..b5c716f
 +            overall.setProgress(count);
 +            itemLabel.setText(R.string.deps_install_finished_hint);
 +            current.setVisibility(GONE);
++            new Thread(() -> DependencyManager.exportActiveInstallLog(getContext().getApplicationContext())).start();
 +            final File finished = file;
 +            postDelayed(() -> {
 +                if (finished.equals(DependencyManager.getActiveProgressFile())) DependencyManager.clearActiveProgress();
@@ -3277,7 +3348,7 @@ index 0000000..b5c716f
 +    }
 +}
 diff --git a/app/src/main/java/com/winlator/widget/LogView.java b/app/src/main/java/com/winlator/widget/LogView.java
-index 6343202..590a3d5 100644
+index 6343202..65fdec7 100644
 --- a/app/src/main/java/com/winlator/widget/LogView.java
 +++ b/app/src/main/java/com/winlator/widget/LogView.java
 @@ -1,23 +1,26 @@
@@ -3348,7 +3419,7 @@ index 6343202..590a3d5 100644
              this.printStream = printStream;
          }
          else printStream = null;
-@@ -212,35 +215,65 @@ public class LogView extends View {
+@@ -212,35 +215,70 @@ public class LogView extends View {
              printStream.append(line);
              printStream.flush();
          }
@@ -3382,6 +3453,11 @@ index 6343202..590a3d5 100644
      }
  
 +    private static OutputStream openDownloadsLog(Context context, String legacyPath) throws IOException {
++        return openDownloadsFile(context, "logs.txt", legacyPath);
++    }
++
++    /** Opens Download/MiniEXE/<name> for overwriting (MediaStore on Android 10+). */
++    public static OutputStream openDownloadsFile(Context context, String name, String legacyPath) throws IOException {
 +        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
 +            File file = new File(legacyPath);
 +            File parent = file.getParentFile();
@@ -3394,12 +3470,12 @@ index 6343202..590a3d5 100644
 +        try (Cursor cursor = context.getContentResolver().query(collection,
 +                new String[]{MediaStore.MediaColumns._ID},
 +                MediaStore.MediaColumns.RELATIVE_PATH + "=? AND " + MediaStore.MediaColumns.DISPLAY_NAME + "=?",
-+                new String[]{relativePath, "logs.txt"}, null)) {
++                new String[]{relativePath, name}, null)) {
 +            if (cursor != null && cursor.moveToFirst()) item = ContentUris.withAppendedId(collection, cursor.getLong(0));
 +        }
 +        if (item == null) {
 +            ContentValues values = new ContentValues();
-+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, "logs.txt");
++            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
 +            values.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
 +            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
 +            item = context.getContentResolver().insert(collection, values);
@@ -3773,10 +3849,10 @@ index 3475814..ae16096 100644
 \ No newline at end of file
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61fcd5e..0f1b0a2 100644
+index 61fcd5e..3f54484 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,61 @@
+@@ -1,6 +1,66 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Winlator</string>
@@ -3826,7 +3902,12 @@ index 61fcd5e..0f1b0a2 100644
 +    <string name="deps_installing_count">Installing dependency %1$d of %2$d</string>
 +    <string name="deps_install_starting">Starting dependency install…</string>
 +    <string name="deps_install_finished">Dependency install finished</string>
-+    <string name="deps_install_finished_hint">Open Dependencies on the home screen to see verified status. Installer logs: Download/MiniEXE/setup-logs</string>
++    <string name="deps_install_finished_hint">Open Dependencies on the home screen to see verified status. The install log is saved to Download/MiniEXE/install-log.txt.</string>
++    <string name="deps_view_install_log">View last install log</string>
++    <string name="deps_install_log">Install log (also saved to Download/MiniEXE/install-log.txt)</string>
++    <string name="deps_copy">Copy</string>
++    <string name="deps_copied">Copied to clipboard</string>
++    <string name="deps_share">Share</string>
 +    <string name="container_settings">Container Settings</string>
 +    <string name="switch_container">Switch Container</string>
 +    <string name="no_container_yet">No container yet. One is created the first time you open Run EXE, File Explorer, or Container Settings.</string>
@@ -3839,7 +3920,7 @@ index 61fcd5e..0f1b0a2 100644
      <string name="run">Run</string>
      <string name="edit">Edit</string>
      <string name="remove">Remove</string>
-@@ -351,10 +406,10 @@
+@@ -351,10 +411,10 @@
      <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
      <string name="renderer">Renderer</string>
      <string name="default_no_override">Default (No override)</string>
